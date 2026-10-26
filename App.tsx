@@ -28,11 +28,13 @@ import { LoadingScreen } from "./src/components/LoadingScreen";
 import { Onboarding } from "./src/components/Onboarding";
 import { SetupRequired } from "./src/components/SetupRequired";
 import { colors } from "./src/theme";
+import { Body } from "./src/components/Type";
+import { PrimaryButton, QuietButton } from "./src/components/Controls";
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function Root() {
-  const { loading, user, profile, cloudEnabled } = useGame();
+  const { loading, user, profile, cloudEnabled, loadFailed, error, retryLoad, signOut } = useGame();
 
   return (
     <>
@@ -40,6 +42,12 @@ function Root() {
         <SetupRequired />
       ) : loading ? (
         <LoadingScreen />
+      ) : loadFailed && user ? (
+        <View style={{ flex: 1, justifyContent: "center", padding: 24, gap: 20 }}>
+          <Body accessibilityRole="alert">{error ?? "Your journal couldn’t be loaded. Nothing has been overwritten."}</Body>
+          <PrimaryButton label="Try again" onPress={() => void retryLoad()} />
+          <QuietButton label="Sign out" onPress={() => void signOut()} />
+        </View>
       ) : !user ? (
         <AuthScreen />
       ) : !profile ? (
