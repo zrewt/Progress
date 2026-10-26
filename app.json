@@ -10,10 +10,12 @@
     "backgroundColor": "#11140F",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.vitalitytree.mobile"
+      "bundleIdentifier": "app.vitalitytree.mobile",
+      "buildNumber": "1"
     },
     "android": {
       "package": "app.vitalitytree.mobile",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#11140F",
         "foregroundImage": "./assets/android-icon-foreground.png",

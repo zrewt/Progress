@@ -97,7 +97,30 @@ true, stop and re-run the grant statements from `202610250001_daily_loop.sql`.
   motion.
 - Rotate any key that was ever present in a client bundle, `.expo` logs or old builds.
 
-## 6. Out of scope for this work
+## 6. Builds (EAS)
+
+`eas.json` defines three profiles, each carrying the public `EXPO_PUBLIC_SUPABASE_*` values
+so a cloud build is not missing its configuration. These are public by design (they ship in
+the bundle); RLS is what protects data.
+
+```bash
+npx eas-cli@latest login
+npx eas-cli@latest init                 # links the project, writes extra.eas.projectId
+npx eas-cli@latest build --profile development --platform android
+npx eas-cli@latest build --profile preview --platform android
+npx eas-cli@latest build --profile production --platform all
+```
+
+`development` needs `expo-dev-client` (already installed) and never goes to a store. Use it
+to test the recovery deep link, notifications and device behaviour that Expo Go cannot
+reproduce. `preview` is a release-like `.apk` for stakeholders. `production` produces the
+store binaries and is the only profile to submit with `eas submit`.
+
+Before the first iOS build: an Apple Developer Program membership ($99/year) is required, and
+`eas init` must be run while signed in. Google Play submission needs a $25 one-time
+membership; internal `.apk` builds need neither.
+
+## 7. Out of scope for this work
 
 Billing and entitlements, EAS/signed builds and store listing, push notifications,
 analytics, social features, HealthKit, and visual redesign. Those remain Stage 4/5.
