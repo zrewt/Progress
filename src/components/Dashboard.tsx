@@ -1,112 +1,47 @@
-import { useMemo, useRef, useState, type ComponentRef } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-  type LayoutChangeEvent,
-} from "react-native";
+import { useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowDown, ArrowRight, Clock, X } from "lucide-react-native";
+import { RotateCcw, X } from "lucide-react-native";
 import { useGame } from "../lib/game-context";
-import { IDENTITY_MAP, PILLARS, PILLAR_MAP, ROMAN } from "../lib/pillars";
-import {
-  completedCount,
-  levelStats,
-  milestoneForTier,
-  nextBestNode,
-  pillarProgress,
-  seasonProgress,
-  weekSummary,
-} from "../lib/tree";
+import type { Practice } from "../lib/daily-types";
 import type { TreeNode } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
-import { BotanicalBranch } from "./BotanicalBranch";
 import { BrandMark } from "./BrandMark";
-import { PillarIcon } from "./PillarIcon";
-import { PrimaryButton, LinkButton, Rule } from "./Controls";
-import { Body, Display, DisplayItalic, Label, Micro, Mono } from "./Type";
+import { QuietButton } from "./Controls";
+import { Display, DisplayItalic, Label, Micro } from "./Type";
 import { SkillTree } from "./SkillTree";
-import { NodeModal } from "./NodeModal";
+import { TodayCard } from "./TodayCard";
+import { PracticeSheet } from "./PracticeSheet";
+import { WeekReviewCard } from "./WeekReviewCard";
+import { EditPlanSheet, SeasonHistory, SeasonSummarySheet } from "./PlanSheets";
 import { TopBar } from "./TopBar";
 
-function StatRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <View style={styles.statRow}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text numberOfLines={1} style={styles.statValue}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 export function Dashboard() {
-  const {
-    user,
-    profile,
-    nodes,
-    treeSource,
-    error,
-    clearError,
-    completeNode,
-  } = useGame();
+  const { user, profile, nodes, today, error, clearError, undoOffer, undoEvent, dismissUndo, retryLoad } = useGame();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const wide = width >= 900;
-  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
-  const [treeY, setTreeY] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [active, setActive] = useState<Practice | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [finishing, setFinishing] = useState(false);
 
-  const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === selectedId) ?? null,
-    [nodes, selectedId],
-  );
+  if (!profile || !today) return null;
 
-  if (!profile) return null;
-
-  const stats = levelStats(profile.xp);
-  const identity = IDENTITY_MAP[profile.identity];
-  const season = seasonProgress(profile.seasonStartedAt);
-  const week = weekSummary(nodes);
-  const focus = nextBestNode(nodes, profile.identity);
-  const focusPillar = focus ? PILLAR_MAP[focus.pillar] : null;
-  const mastered = completedCount(nodes);
-  const focusBranch = focus
-    ? nodes.filter((node) => node.pillar === focus.pillar).sort((a, b) => a.tier - b.tier)
-    : [];
-  const nextInBranch = focus
-    ? focusBranch.find((node) => node.tier === focus.tier + 1) ?? null
-    : null;
-  const firstName = (profile.displayName || user?.name || "Athlete").split(" ")[0];
-  const bestPillar = PILLARS.map((pillar) => ({
-    pillar,
-    progress: pillarProgress(nodes, pillar.id),
-  })).sort((a, b) => b.progress.done - a.progress.done)[0];
-
-  function handleTreeLayout(event: LayoutChangeEvent) {
-    setTreeY(event.nativeEvent.layout.y);
-  }
+  const firstName = (profile.displayName || user?.name || "").split(" ")[0];
+  const season = today.season;
+  const daysLeft = Math.max(0, 30 - today.dayNumber);
+  const grown = nodes.filter((node) => node.status === "completed").length;
 
   return (
     <View style={{ flex: 1 }}>
       <TopBar />
 
       <ScrollView
-        ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingHorizontal: wide ? 32 : 20,
-          paddingTop: wide ? 34 : 24,
-          paddingBottom: Math.max(insets.bottom, 24) + 24,
+          paddingTop: wide ? 30 : 20,
+          paddingBottom: Math.max(insets.bottom, 24) + 28,
           width: "100%",
           maxWidth: 1040,
           alignSelf: "center",
@@ -115,248 +50,103 @@ export function Dashboard() {
       >
         {error ? (
           <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
-            <Pressable
-              onPress={clearError}
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss message"
-              hitSlop={12}
-            >
+            <Text style={styles.errorText} accessibilityRole="alert">{error}</Text>
+            <Pressable onPress={clearError} accessibilityRole="button" accessibilityLabel="Dismiss message" hitSlop={12}>
               <X size={14} strokeWidth={1.6} color={colors.sage} />
             </Pressable>
           </View>
         ) : null}
 
-        <View>
+        <View style={styles.seasonRow}>
           <Label>
-            Season I <Text style={{ color: colors.sageDeep }}>·</Text> Day{" "}
-            {season.day} of {season.total}
+            Season · Day {today.dayNumber} of 30
           </Label>
-          <Display style={[styles.hero, wide && styles.heroWide]}>
-            You are becoming{"\n"}
-            <DisplayItalic
-              style={[
-                { fontSize: 38, lineHeight: 42, color: colors.lichen },
-                wide && { fontSize: 52, lineHeight: 55 },
-              ]}
-            >
-              {identity ? identity.name.toLowerCase() : "your future self"}.
-            </DisplayItalic>
-          </Display>
-          <Body style={styles.heroCopy}>
-            Welcome back, {firstName}. Your tree grows from what you actually do,
-            not what you plan. One action is enough today.
-          </Body>
-
-          <View style={styles.goalPanel}>
-            <Micro style={{ color: colors.copperLight }}>Your 30-day goal</Micro>
-            <Display style={styles.goalText}>{profile.goal || "One small change"}</Display>
-            <View style={styles.chips}>
-              <Text style={styles.chipText}>{profile.timeBudget} minutes a day</Text>
-              <View style={styles.chipDot} />
-              <Text style={styles.chipText}>
-                {completedCount(nodes)} of {nodes.length} actions grown
-              </Text>
-              <View style={styles.chipDot} />
-              <Text style={[styles.chipText, { color: colors.lichen }]}>
-                {treeSource === "edge-ai"
-                  ? "Server AI Plan · Key Hidden"
-                  : "Starting Seed Plan · Key Hidden"}
-              </Text>
-            </View>
-          </View>
+          <Micro style={{ color: colors.lichen }}>
+            {today.streak} day streak · best {today.bestStreak}
+          </Micro>
         </View>
 
-        <View style={wide ? styles.cardsRow : undefined}>
-        <View style={[styles.practiceCard, wide && styles.practiceCardWide]}>
-          <View pointerEvents="none" style={styles.watermark}>
-            <BotanicalBranch height={220} opacity={0.07} />
-          </View>
+        <Display style={[styles.greeting, wide && styles.greetingWide]}>
+          {firstName ? `${firstName}, ` : ""}
+          <DisplayItalic style={{ color: colors.lichen }}>one thing today.</DisplayItalic>
+        </Display>
+        <Text style={styles.goalLine} numberOfLines={2}>“{season.goal}”</Text>
 
-          <View style={styles.practiceHead}>
-            <View style={{ flex: 1 }}>
-              <Label style={{ color: colors.copperLight }}>
-                The next best action
-              </Label>
-              <Text style={styles.practiceMeta}>
-                {focusPillar ? focusPillar.name : "All branches"} · Tier{" "}
-                {focus ? ROMAN[focus.tier] : "IV"}
-                {focus ? ` · ${milestoneForTier(focus.tier)}` : ""}
-              </Text>
-            </View>
-            {focusPillar ? (
-              <DisplayItalic
-                style={[styles.practiceRoman, { color: focusPillar.accent }]}
-              >
-                {focusPillar.roman}
-              </DisplayItalic>
-            ) : null}
-          </View>
-
-          {focus && focusPillar ? (
-            <>
-              <View style={styles.focusRow}>
-                <View style={styles.focusIcon}>
-                  <PillarIcon
-                    pillar={focus.pillar}
-                    size={20}
-                    color={focusPillar.accent}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Display style={styles.focusTitle}>{focus.title}</Display>
-                  <Body style={styles.focusDescription}>{focus.description}</Body>
-                </View>
-              </View>
-
-              <View style={styles.metaRow}>
-                <View style={styles.metaItem}>
-                  <Clock size={11} strokeWidth={1.6} color={colors.sageDim} />
-                  <Text style={styles.metaText}>{focus.duration}</Text>
-                </View>
-                <Text style={styles.metaDivider}>·</Text>
-                <Text style={[styles.metaText, { color: colors.copperLight }]}>
-                  +50 XP
-                </Text>
-                <Text style={styles.metaDivider}>·</Text>
-                <Text style={styles.metaText}>
-                  {focus.tier < 3
-                    ? `Grows toward ${milestoneForTier(focus.tier + 1)}`
-                    : "Completes this branch"}
-                </Text>
-              </View>
-
-              <View style={styles.actions}>
-                <PrimaryButton
-                  label="Begin practice"
-                  onPress={() => setSelectedId(focus.id)}
-                  icon={
-                    <ArrowRight size={15} strokeWidth={2} color={colors.ink950} />
-                  }
-                  style={wide ? { minWidth: 220 } : { flexGrow: 1 }}
-                />
-              </View>
-
-              <LinkButton
-                label="See the branch"
-                color={colors.sage}
-                icon={<ArrowDown size={12} strokeWidth={1.8} color={colors.sage} />}
-                onPress={() =>
-                  scrollRef.current?.scrollTo({
-                    y: Math.max(0, treeY - 8),
-                    animated: true,
-                  })
-                }
-              />
-
-              <DisplayItalic style={styles.quote}>
-                You do not need a new plan. You need one more repetition.
-              </DisplayItalic>
-
-              <View style={styles.branchFooter}>
-                <Text style={styles.branchFooterText}>
-                  {focusPillar?.name ?? "Branch"}{" "}
-                  {focusBranch.filter((node) => node.status === "completed").length}/
-                  {focusBranch.length} grown
-                </Text>
-                <Text numberOfLines={1} style={styles.branchFooterText}>
-                  {nextInBranch ? `Next — ${nextInBranch.title}` : "Capstone"}
-                </Text>
-              </View>
-            </>
-          ) : (
-            <View style={{ marginTop: 18 }}>
-              <Display style={{ fontSize: 30, lineHeight: 34 }}>
-                The whole canopy is in leaf.
-              </Display>
-              <Body style={{ marginTop: 10 }}>
-                Every practice in this season is complete. Revisit a branch above to
-                keep the rhythm, or begin again with a new focus.
-              </Body>
-            </View>
-          )}
-        </View>
-
-        <View style={[styles.seasonCard, wide && styles.seasonCardWide]}>
-          <Label>Season I</Label>
-
-          <View style={styles.masteredRow}>
-            <Display style={styles.masteredNumber}>{season.day}</Display>
-            <Text style={styles.masteredCaption}>/ {season.total} days</Text>
-          </View>
-
-          <View style={styles.masteredBarTrack}>
-            <View
-              style={[
-                styles.masteredBar,
-                { width: `${Math.min(100, (season.day / season.total) * 100)}%` },
-              ]}
-            />
-          </View>
-
-          <View style={styles.statList}>
-            <StatRow
-              label="Tree grown"
-              value={`${mastered} / ${nodes.length} actions`}
-            />
-            <StatRow
-              label="Streak"
-              value={`${profile.streak} ${profile.streak === 1 ? "day" : "days"}`}
-            />
-            <StatRow label="Level" value={String(stats.level)} />
-            <StatRow
-              label="Strongest branch"
-              value={
-                bestPillar && bestPillar.progress.done > 0
-                  ? bestPillar.pillar.name
-                  : "Not yet"
-              }
-            />
-          </View>
-
-          <View style={styles.reviewBlock}>
-            <Micro style={{ color: colors.lichenDim }}>This week</Micro>
-            <Display style={styles.reviewLine}>
-              {week.completed === 0
-                ? "Your tree is waiting for its first touch this week."
-                : `${week.completed} ${week.completed === 1 ? "action" : "actions"} across ${week.activeDays} ${week.activeDays === 1 ? "day" : "days"}.`}
-            </Display>
-            <Text style={styles.reviewCopy}>
-              {week.completed === 0
-                ? "Pick the next best action and begin. A missed day never erases a branch."
-                : week.activeDays >= 4
-                  ? "That is a rhythm, not a burst. Keep the same small size next week."
-                  : "Two more days would make this a pattern. Choose the easiest branch tomorrow."}
+        {today.welcomeBack ? (
+          <View style={styles.welcome}>
+            <Display style={styles.welcomeTitle}>Welcome back.</Display>
+            <Text style={styles.welcomeBody}>
+              A gap is not a failure, and nothing here has been taken away. The easiest version is waiting, and that is
+              a complete day.
             </Text>
+            <QuietButton label="Start again, gently" onPress={() => setActive(today.primary)} />
           </View>
+        ) : null}
 
-          <View style={styles.xpBlock}>
-            <View style={styles.xpRow}>
-              <Text style={styles.xpLabels}>
-                {stats.into} / {stats.needed} XP
-              </Text>
-              <Text style={styles.xpLabels}>Level {stats.level + 1}</Text>
-            </View>
-            <View style={styles.xpTrack}>
-              <View
-                style={[
-                  styles.xpFill,
-                  { width: `${Math.max(2, stats.progress * 100)}%` },
-                ]}
-              />
-            </View>
-          </View>
+        <TodayCard onBegin={(practice) => setActive(practice)} />
 
-          <View style={styles.syncRow}>
-            <View style={[styles.syncDot, { backgroundColor: colors.lichen }]} />
-            <Text style={styles.syncText}>Synced to Supabase</Text>
+        <WeekReviewCard />
+
+        <View style={styles.treeBlock}>
+          <View style={styles.sectionHead}>
+            <Micro style={{ color: colors.lichenDim }}>Your tree</Micro>
+            <Micro>{grown} of {nodes.length} grown</Micro>
           </View>
+          <SkillTree nodes={nodes} onSelect={(node: TreeNode) => {
+            const practice = today.primary.id === node.id ? today.primary : today.supporting.find((item) => item.id === node.id);
+            if (practice) setActive(practice);
+          }} />
         </View>
 
+        <View style={styles.historyBlock}>
+          <View style={styles.sectionHead}>
+            <Micro style={{ color: colors.lichenDim }}>Last seven days</Micro>
+            <Micro>{daysLeft} days left in this season</Micro>
+          </View>
+          {today.recent.map((day) => {
+            const counted = day.events.find((event) => event.kind === "full" || event.kind === "easy");
+            const undone = day.events.length === 0;
+            const label = counted
+              ? counted.kind === "easy"
+                ? "Easier version"
+                : "Full practice"
+              : day.rest
+                ? "Rest day"
+                : undone
+                  ? "Nothing recorded"
+                  : "Skipped";
+            const accent = counted ? colors.lichen : day.rest ? colors.heather : colors.sageDeep;
+            return (
+              <View key={day.date} style={styles.historyRow}>
+                <View style={[styles.historyDot, { backgroundColor: accent }]} />
+                <Text style={styles.historyDate}>{day.date.slice(5)}</Text>
+                <Text style={styles.historyLabel}>{label}</Text>
+                {counted && counted.local_date === today.today ? (
+                  <Pressable
+                    onPress={() => void undoEvent(counted.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Undo ${label} on ${day.date}`}
+                    hitSlop={10}
+                    style={styles.undoLink}
+                  >
+                    <RotateCcw size={12} strokeWidth={1.8} color={colors.sage} />
+                    <Text style={styles.undoText}>Undo</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          })}
         </View>
 
-        <View onLayout={handleTreeLayout} style={{ marginTop: 44 }}>
-          <SkillTree nodes={nodes} onSelect={(node: TreeNode) => setSelectedId(node.id)} />
+        <View style={styles.footerBlock}>
+          <View style={styles.footerActions}>
+            <QuietButton label="Edit goal or time" onPress={() => setEditing(true)} style={{ flex: 1 }} />
+            <QuietButton label="Finish this season" onPress={() => setFinishing(true)} style={{ flex: 1 }} />
+          </View>
+          <SeasonHistory />
+          <Pressable onPress={() => void retryLoad()} accessibilityRole="button" accessibilityLabel="Refresh your journal" style={styles.refresh}>
+            <Text style={styles.refreshText}>Refresh</Text>
+          </Pressable>
         </View>
 
         <View style={styles.footer}>
@@ -364,213 +154,75 @@ export function Dashboard() {
             <BrandMark size={22} color={colors.sage} />
             <Display style={styles.footerName}>Vitality Tree</Display>
           </View>
-          <Text style={styles.footerCopy}>
-            Your life is the game · Your progress grows the tree
-          </Text>
+          <Text style={styles.footerCopy}>Your life is the game · Your progress grows the tree</Text>
         </View>
       </ScrollView>
 
-      <NodeModal
-        node={selectedNode}
-        goal={profile.goal}
-        onClose={() => setSelectedId(null)}
-        onComplete={completeNode}
-      />
+      {undoOffer ? (
+        <View style={[styles.undoBar, { bottom: Math.max(insets.bottom, 14) }]} accessibilityRole="alert">
+          <Text style={styles.undoBarText}>{undoOffer.label}</Text>
+          <Pressable onPress={() => void undoEvent(undoOffer.eventId)} accessibilityRole="button" accessibilityLabel="Undo this entry" style={styles.undoBarButton}>
+            <Text style={styles.undoBarButtonText}>Undo</Text>
+          </Pressable>
+          <Pressable onPress={dismissUndo} accessibilityRole="button" accessibilityLabel="Dismiss undo" hitSlop={10}>
+            <X size={14} strokeWidth={1.8} color={colors.sage} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {active ? (
+        <PracticeSheet
+          key={active.id}
+          practice={active}
+          defaultEasy={today.easierByDefault && active.id === today.primary.id}
+          onClose={() => setActive(null)}
+        />
+      ) : null}
+      {editing ? <EditPlanSheet visible onClose={() => setEditing(false)} /> : null}
+      {finishing ? <SeasonSummarySheet visible onClose={() => setFinishing(false)} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   errorBanner: {
-    marginBottom: 22,
-    borderLeftWidth: 2,
-    borderLeftColor: colors.clay,
-    backgroundColor: alpha(colors.clay, 0.07),
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
+    marginBottom: 18, borderLeftWidth: 2, borderLeftColor: colors.clay, backgroundColor: alpha(colors.clay, 0.07),
+    paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "flex-start", gap: 10,
   },
-  errorText: {
-    flex: 1,
-    fontFamily: fonts.sans,
-    fontSize: 12,
-    lineHeight: 19,
-    color: colors.bone,
+  errorText: { flex: 1, fontFamily: fonts.sans, fontSize: 12, lineHeight: 19, color: colors.bone },
+  seasonRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  greeting: { marginTop: 12, fontSize: 32, lineHeight: 36, letterSpacing: -0.9 },
+  greetingWide: { fontSize: 40, lineHeight: 44 },
+  goalLine: { marginTop: 8, fontFamily: fonts.sans, fontSize: 12.5, lineHeight: 19, color: colors.boneDim },
+  welcome: {
+    marginTop: 16, padding: 16, gap: 9, borderLeftWidth: 2, borderLeftColor: colors.lichen,
+    backgroundColor: alpha(colors.lichen, 0.06),
   },
-  hero: { marginTop: 14, fontSize: 38, lineHeight: 42, letterSpacing: -1 },
-  heroWide: { fontSize: 52, lineHeight: 55 },
-  heroCopy: { marginTop: 14, maxWidth: 360, lineHeight: 21 },
-  goalPanel: {
-    marginTop: 20,
-    borderLeftWidth: 1,
-    borderLeftColor: alpha(colors.copper, 0.5),
-    paddingLeft: 13,
-  },
-  goalText: { marginTop: 5, fontSize: 19, lineHeight: 24 },
-  chips: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  chipText: { fontFamily: fonts.sans, fontSize: 10.5, color: colors.sage },
-  chipDot: {
-    height: 3,
-    width: 3,
-    borderRadius: 2,
-    backgroundColor: colors.sageDeep,
-  },
-
-  cardsRow: { flexDirection: "row", alignItems: "flex-start", gap: 18 },
-  practiceCardWide: { flex: 1.55 },
-  seasonCardWide: { flex: 1, marginTop: 26 },
-  practiceCard: {
-    marginTop: 26,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: hairline,
-    backgroundColor: alpha(colors.ink850, 0.55),
-    padding: 20,
-    overflow: "hidden",
-  },
-  watermark: { position: "absolute", right: -30, bottom: 40 },
-  practiceHead: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  practiceMeta: {
-    marginTop: 5,
-    fontFamily: fonts.sans,
-    fontSize: 10.5,
-    color: colors.sage,
-  },
-  practiceRoman: { fontSize: 22, lineHeight: 24 },
-  focusRow: { marginTop: 22, flexDirection: "row", gap: 14 },
-  focusIcon: {
-    height: 44,
-    width: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: alpha(colors.bone, 0.15),
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 4,
-  },
-  focusTitle: { fontSize: 27, lineHeight: 30, letterSpacing: -0.8 },
-  focusDescription: { marginTop: 9, fontSize: 13, lineHeight: 21 },
-  metaRow: {
-    marginTop: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 7,
-  },
-  metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  metaText: {
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: colors.sageDim,
-  },
-  metaDivider: { fontFamily: fonts.mono, fontSize: 9, color: colors.sageDeep },
-  actions: { marginTop: 20, flexDirection: "row" },
-  quote: {
-    marginTop: 22,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: hairline,
-    fontSize: 15,
-    lineHeight: 23,
-    color: colors.sage,
-    maxWidth: 330,
-  },
-  branchFooter: {
-    marginTop: 18,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: hairline,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  branchFooterText: {
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: colors.sageDeep,
-  },
-
-  seasonCard: {
-    marginTop: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: hairline,
-    padding: 20,
-  },
-  masteredRow: { marginTop: 16, flexDirection: "row", alignItems: "baseline", gap: 8 },
-  masteredNumber: { fontSize: 48, lineHeight: 48 },
-  masteredCaption: { fontFamily: fonts.sans, fontSize: 11, color: colors.sage },
-  masteredBarTrack: {
-    marginTop: 14,
-    height: 1,
-    backgroundColor: alpha(colors.bone, 0.15),
-  },
-  masteredBar: { height: 1, backgroundColor: colors.lichen },
-  statList: {
-    marginTop: 18,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: hairline,
-  },
-  statRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: hairline,
-  },
-  statLabel: { fontFamily: fonts.sans, fontSize: 11, color: colors.sage },
-  statValue: { fontFamily: fonts.mono, fontSize: 11.5, color: colors.bone, flexShrink: 1 },
-  xpBlock: { marginTop: 16 },
-  xpRow: { flexDirection: "row", justifyContent: "space-between" },
-  xpLabels: {
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: colors.sage,
-  },
-  xpTrack: { marginTop: 7, height: 1, backgroundColor: alpha(colors.bone, 0.15) },
-  xpFill: { height: 1, backgroundColor: colors.lichen },
-  reviewBlock: {
-    marginTop: 18,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: hairline,
-  },
-  reviewLine: { marginTop: 6, fontSize: 17, lineHeight: 22 },
-  reviewCopy: {
-    marginTop: 6,
-    fontFamily: fonts.sans,
-    fontSize: 11.5,
-    lineHeight: 18,
-    color: colors.sage,
-  },
-  syncRow: { marginTop: 20, flexDirection: "row", alignItems: "center", gap: 7 },
-  syncDot: { height: 4, width: 4, borderRadius: 2 },
-  syncText: { fontFamily: fonts.sans, fontSize: 10.5, color: colors.sage },
-
-  footer: {
-    marginTop: 44,
-    paddingTop: 18,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: hairline,
-    gap: 8,
-  },
+  welcomeTitle: { fontSize: 22, lineHeight: 25 },
+  welcomeBody: { fontFamily: fonts.sans, fontSize: 12.5, lineHeight: 20, color: colors.sage },
+  treeBlock: { marginTop: 34 },
+  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 },
+  historyBlock: { marginTop: 30 },
+  historyRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 42, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: hairline },
+  historyDot: { height: 5, width: 5, borderRadius: 3 },
+  historyDate: { width: 46, fontFamily: fonts.mono, fontSize: 10, color: colors.sageDim },
+  historyLabel: { flex: 1, fontFamily: fonts.sans, fontSize: 12, color: colors.boneDim },
+  undoLink: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 42, paddingHorizontal: 4 },
+  undoText: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.sage },
+  footerBlock: { marginTop: 26 },
+  footerActions: { flexDirection: "row", gap: 9 },
+  refresh: { minHeight: 44, justifyContent: "center", marginTop: 4 },
+  refreshText: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.sageDim },
+  footer: { marginTop: 30, paddingTop: 18, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hairline, gap: 8 },
   footerBrand: { flexDirection: "row", alignItems: "center", gap: 9 },
   footerName: { fontSize: 16 },
   footerCopy: { fontFamily: fonts.sans, fontSize: 10.5, lineHeight: 18, color: colors.sage },
+  undoBar: {
+    position: "absolute", left: 16, right: 16, flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 14, paddingVertical: 12, borderRadius: 2,
+    backgroundColor: colors.ink700, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.16),
+  },
+  undoBarText: { flex: 1, fontFamily: fonts.sansMedium, fontSize: 12, color: colors.bone },
+  undoBarButton: { minHeight: 36, justifyContent: "center", paddingHorizontal: 10, backgroundColor: colors.lichen, borderRadius: 2 },
+  undoBarButtonText: { fontFamily: fonts.sansSemi, fontSize: 11.5, color: colors.ink950 },
 });

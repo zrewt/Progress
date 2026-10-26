@@ -46,6 +46,7 @@ export interface TreeNode {
   instructions: string[];
   status: NodeStatus;
   completedAt?: string | null;
+  branchLabel?: string;
 }
 
 export interface Profile {

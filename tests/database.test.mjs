@@ -74,3 +74,64 @@ test('daily database: migrations, backfill, atomic retries, undo, boundaries, ar
   assert.equal((await db.query('select * from public.seasons')).rows.length,3);
  });
 });
+
+test('weekly review, plan edits and replacement keep history intact', async(t)=>{
+ const db=await setup(); t.after(()=>db.close()); await asUser(db);
+ const season=await rpc(db,'start_next_season',[plan,'America/New_York','Writer','archived']);
+ const practices=(await db.query('select id,practice_id from public.milestones where season_id=$1',[season])).rows;
+ const active=(await db.query('select id,branch,role,title from public.practices where season_id=$1 and active order by sort_order',[season])).rows;
+ // Move the season back ten days so a full review week exists, then practise six of its days.
+ await db.exec('reset role');
+ const week=(await db.query("select to_char((now() at time zone 'America/New_York')::date - 10,'YYYY-MM-DD') week_start")).rows[0].week_start;
+ await db.exec(`update public.seasons set started_on='${week}', ends_on=started_on+30 where id='${season}'`);
+ await asUser(db);
+ for(let day=0;day<6;day++){
+   const at=new Date(`${week}T16:00:00Z`); at.setUTCDate(at.getUTCDate()+day);
+   await rpc(db,'complete_practice',[season,active[0].id,'full',crypto.randomUUID(),at.toISOString()]);
+ }
+ await t.test('review computes adherence and offers an increase without changing the plan',async()=>{
+  const review=await rpc(db,'submit_weekly_review',[season,week,2]);
+  assert.equal(review.decision,'harder'); assert.equal(Number(review.adherence).toFixed(3),'0.857');
+  assert.equal((await db.query('select week_mode from public.seasons where id=$1',[season])).rows[0].week_mode,'same');
+  assert.equal((await db.query('select * from public.practices where season_id=$1 and active',[season])).rows.length,4);
+ });
+ await t.test('a hard review lightens the next week and resubmission updates one row',async()=>{
+  const review=await rpc(db,'submit_weekly_review',[season,week,4,'A tiring week']);
+  assert.equal(review.decision,'lighter');
+  assert.equal((await db.query('select week_mode from public.seasons where id=$1',[season])).rows[0].week_mode,'lighter');
+  assert.equal((await db.query('select count(*)::int n from public.weekly_reviews')).rows[0].n,1);
+  await assert.rejects(()=>db.exec("update public.weekly_reviews set decision='harder'"));
+  await assert.rejects(()=>db.exec('delete from public.weekly_reviews'));
+ });
+ await t.test('editing the plan adds a version and retires instead of deleting',async()=>{
+  const events=(await db.query('select count(*)::int n from public.completion_events')).rows[0].n;
+  const version=await rpc(db,'update_plan',[season,{...plan,minutes_budget:15,practices:plan.practices.map(p=>({...p,full_variant:{...p.full_variant,minutes:15}}))}]);
+  assert.equal(version,2);
+  assert.equal((await db.query('select count(*)::int n from public.practices where season_id=$1 and active',[season])).rows[0].n,4);
+  assert.equal((await db.query('select count(*)::int n from public.practices where season_id=$1 and not active',[season])).rows[0].n,4);
+  assert.equal((await db.query('select count(*)::int n from public.completion_events')).rows[0].n,events);
+  assert.equal((await db.query('select count(*)::int n from public.milestones where season_id=$1',[season])).rows[0].n,16);
+  assert.equal((await db.query('select minutes_budget from public.seasons where id=$1',[season])).rows[0].minutes_budget,15);
+  await assert.rejects(()=>rpc(db,'update_plan',[season,{...plan,goal:'x'}]));
+ });
+ await t.test('replacement stays on its branch and moves the milestones',async()=>{
+  const target=(await db.query('select id,branch,role from public.practices where season_id=$1 and active order by sort_order limit 1',[season])).rows[0];
+  const draft={branch:target.branch,title:'A different small step',why:'Same branch, gentler entry.',full_variant:{title:'Full',minutes:15,steps:['Begin.']},easy_variant:{title:'Easy',minutes:2,steps:['Start small.']}};
+  const newId=await rpc(db,'replace_practice',[season,target.id,draft]);
+  assert.notEqual(newId,target.id);
+  const old=(await db.query('select active,replaced_by,retired_at from public.practices where id=$1',[target.id])).rows[0];
+  assert.equal(old.active,false); assert.equal(old.replaced_by,newId); assert.ok(old.retired_at);
+  assert.equal((await db.query('select count(*)::int n from public.milestones where practice_id=$1',[newId])).rows[0].n,4);
+  assert.equal((await db.query('select count(*)::int n from public.milestones where season_id=$1',[season])).rows[0].n,16);
+  await assert.rejects(()=>rpc(db,'replace_practice',[season,newId,{...draft,branch:target.branch==='body'?'mind':'body'}]));
+  await assert.rejects(()=>rpc(db,'replace_practice',[season,target.id,draft]));
+ });
+ await t.test('history lists finished seasons and stays private',async()=>{
+  await rpc(db,'end_season',[season,'completed']);
+  const history=await rpc(db,'season_history');
+  assert.ok(history.length>=1); assert.ok(history.every((entry)=>entry.status!=='active'));
+  assert.ok(history.some((entry)=>entry.id===season));
+  await asUser(db,B); assert.equal((await rpc(db,'season_history')).length,0);
+  await asUser(db);
+ });
+});

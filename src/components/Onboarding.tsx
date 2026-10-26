@@ -28,6 +28,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGame } from "../lib/game-context";
 import { generateTree, type TreeResult } from "../lib/gemini";
+import { dailyPlanFromTree } from "../lib/daily-adapter";
 import {
   BLOCKERS,
   IDENTITIES,
@@ -64,22 +65,22 @@ const STEPS = [
     label: "The time",
     question: "How much time each day?",
     helper:
-      "A promise you can keep beats a plan you admire. Choose honestly — we will preview your Starting Seed Plan next.",
+      "A promise you can keep beats a plan you admire. Choose honestly — we will show you the first week next.",
   },
   {
     key: "04",
     label: "The seed plan",
-    question: "Your Starting Seed Plan.",
+    question: "Your first plan.",
     helper:
-      "Every branch starts with a 2-minute Seed you can complete even on your hardest day. Review your 4 starting seeds before planting.",
+      "One daily practice and three lighter ones, each with a version you could do on your hardest day. Review it before you begin.",
   },
 ] as const;
 
 const GENERATING_MESSAGES = [
-  "Running safety & pacing guardrails",
+  "Checking the plan is safe and gentle",
   "Shaping four branches around your goal",
-  "Writing your 2-minute starting seeds",
-  "Preparing your 30-day blueprint",
+  "Writing an easier version for hard days",
+  "Preparing your first week",
 ];
 
 const IDENTITY_ICONS: Record<IdentityId, LucideIcon> = {
@@ -334,6 +335,14 @@ export function Onboarding() {
   const suggestedGoals = goalsForIdentity(answers.identity ?? "creator");
   const customGoal = suggestedGoals.includes(goal) ? "" : (answers.goal ?? "");
   const safety = assessGoalSafety(goal);
+  const previewPlan =
+    preview && answers.identity && answers.goal && answers.timeBudget
+      ? dailyPlanFromTree(
+          { identity: answers.identity, goal: answers.goal, blocker: answers.blocker ?? "consistency", timeBudget: answers.timeBudget },
+          preview.tree,
+          preview.source,
+        )
+      : null;
 
   const canContinue =
     step === 0
@@ -589,20 +598,16 @@ export function Onboarding() {
               ))
             : null}
 
-          {step === 3 && preview ? (
+          {step === 3 && preview && previewPlan ? (
             <View style={styles.previewWrap}>
               <View style={styles.previewSummaryCard}>
                 <View style={styles.previewBadgeRow}>
                   <Micro style={{ color: colors.copperLight }}>
-                    {preview.source === "edge-ai"
-                      ? "Server AI · Key Hidden"
-                      : "Starting Seed Engine · Key Hidden"}
+                    {preview.source === "edge-ai" ? "Drafted with AI" : "Built on this device"}
                   </Micro>
-                  <Micro style={{ color: colors.lichen }}>16 actions</Micro>
+                  <Micro style={{ color: colors.lichen }}>4 practices</Micro>
                 </View>
-                <Text style={styles.previewSummaryText}>
-                  {preview.tree.summary}
-                </Text>
+                <Text style={styles.previewSummaryText}>One daily practice, plus three lighter practices for the rest of the week.</Text>
                 <View style={styles.previewSafetyRow}>
                   <ShieldCheck
                     size={13}
@@ -616,29 +621,27 @@ export function Onboarding() {
               </View>
 
               <Label style={{ marginTop: 18, marginBottom: 8 }}>
-                Your 4 starting seeds (Tier I)
+                Your first week
               </Label>
 
-              {preview.tree.pillars.map((branch) => {
-                const meta = PILLAR_MAP[branch.pillar];
-                const seed = branch.nodes[0];
+              {previewPlan.practices.map((practice) => {
+                const meta = PILLAR_MAP[practice.branch];
                 return (
-                  <View key={branch.pillar} style={styles.seedCard}>
+                  <View key={practice.branch} style={styles.seedCard}>
                     <View style={styles.seedHeader}>
                       <View style={styles.seedTitleRow}>
-                        <PillarIcon
-                          pillar={branch.pillar}
-                          size={14}
-                          color={meta.accent}
-                        />
+                        <PillarIcon pillar={practice.branch} size={14} color={meta.accent} />
                         <Text style={styles.seedBranchName}>
-                          {meta.name} · {branch.focus ?? meta.subtitle}
+                          {meta.name} · {practice.role === "primary" ? "every day" : "once this week"}
                         </Text>
                       </View>
-                      <Text style={styles.seedDuration}>{seed?.duration}</Text>
+                      <Text style={styles.seedDuration}>{practice.full_variant.minutes} min</Text>
                     </View>
-                    <Display style={styles.seedTitle}>{seed?.title}</Display>
-                    <Text style={styles.seedDesc}>{seed?.description}</Text>
+                    <Display style={styles.seedTitle}>{practice.title}</Display>
+                    <Text style={styles.seedDesc}>{practice.why}</Text>
+                    <Text style={styles.seedDesc}>
+                      Easier version: {practice.easy_variant.minutes} min — {practice.easy_variant.title.toLowerCase()}
+                    </Text>
                   </View>
                 );
               })}
@@ -696,8 +699,8 @@ export function Onboarding() {
         </View>
 
         <Text style={styles.note}>
-          Your answers are saved to your profile and shape the tree. AI keys are
-          kept strictly server-side; no client secret is ever exposed on-device.
+          Your answers are saved to your account and shape the plan. You can change
+          the goal or the daily size at any time without losing what you have done.
         </Text>
 
         <Rule style={{ marginTop: 28 }} />

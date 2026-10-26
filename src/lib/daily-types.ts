@@ -29,7 +29,32 @@ export interface Season extends Omit<DailyPlan, "practices"> {
   started_on: string;
   ends_on: string;
   status: "active" | "completed" | "archived";
+  week_mode: "same" | "lighter";
+  week_mode_until: string | null;
   created_at: string;
+  ended_at: string | null;
+}
+export interface WeeklyReview {
+  id: string;
+  user_id: string;
+  season_id: string;
+  week_start: string;
+  difficulty: number;
+  note: string | null;
+  adherence: number | string;
+  decision: "lighter" | "same" | "harder";
+  applied_at: string | null;
+  created_at: string;
+}
+export interface SeasonHistoryEntry {
+  id: string;
+  goal: string;
+  status: "completed" | "archived";
+  started_on: string;
+  ends_on: string;
+  days_practiced: number;
+  xp: number;
+  summary: string;
 }
 export interface Practice extends PracticeDraft {
   id: string;
@@ -91,6 +116,7 @@ export interface DailySnapshot {
   practices: Practice[];
   milestones: Milestone[];
   events: CompletionEvent[];
+  reviews: WeeklyReview[];
   progress: Progress | null;
 }
 export interface EventInput {

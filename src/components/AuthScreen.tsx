@@ -191,7 +191,7 @@ export function AuthScreen() {
         <View style={styles.modeRow}>
           <View style={[styles.dot, { backgroundColor: colors.lichen }]} />
           <Text style={styles.modeText}>
-            Your progress is saved to your Supabase profile
+            Your progress is saved to your account
           </Text>
         </View>
 
