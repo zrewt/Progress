@@ -213,7 +213,7 @@ Premium billing is not required to launch a free app, but is required before cha
 - The Edge Function currently parses and returns model JSON without a server-side schema/content validator, and sends raw upstream error detail back to callers.
 - Validate configured model availability instead of assuming each hard-coded fallback model exists or is appropriate.
 - Align client/server safety behavior and handle model refusal honestly rather than describing any repaired response as verified AI output.
-- Remove obsolete public Gemini environment configuration. Expo logs show a variable named `EXPO_PUBLIC_GEMINI_API_KEY` still being loaded; the active client does not reference it. The name alone is not proof of a leaked key. If a real key ever shipped in an older client, rotate it. Never put values in audit reports.
+- Remove obsolete public Gemini environment configuration. Expo logs show an obsolete public model-key variable still being loaded; the active client does not reference it. The name alone is not proof of a leaked key. If a real key ever shipped in an older client, rotate it. Never put values in audit reports.
 - Convert the hand-run SQL into versioned migrations with rollback/data-recovery planning. Review destructive legacy cleanup before applying it to production.
 - Prove two-account isolation with authenticated tests, including all future completion, season, review and entitlement tables.
 

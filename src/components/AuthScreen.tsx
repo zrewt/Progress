@@ -20,7 +20,7 @@ import { Body, Display, Label, Micro } from "./Type";
 type Tab = "signin" | "signup";
 
 export function AuthScreen() {
-  const { signIn, signUp, authBusy } = useGame();
+  const { signIn, signUp, authBusy, requestPasswordReset, resendConfirmation } = useGame();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>("signin");
   const [name, setName] = useState("");
@@ -37,6 +37,22 @@ export function AuthScreen() {
       tab === "signin"
         ? await signIn(email, password)
         : await signUp(name, email, password);
+    if (result.error) setError(result.error);
+    if (result.info) setInfo(result.info);
+  }
+
+  async function handleReset() {
+    setError(null);
+    setInfo(null);
+    const result = await requestPasswordReset(email);
+    if (result.error) setError(result.error);
+    if (result.info) setInfo(result.info);
+  }
+
+  async function handleResend() {
+    setError(null);
+    setInfo(null);
+    const result = await resendConfirmation(email);
     if (result.error) setError(result.error);
     if (result.info) setInfo(result.info);
   }
@@ -168,6 +184,29 @@ export function AuthScreen() {
             }
           />
 
+          {tab === "signin" ? (
+            <Pressable
+              onPress={() => void handleReset()}
+              accessibilityRole="button"
+              accessibilityLabel="Send a password reset link to my email"
+              hitSlop={8}
+              style={styles.forgot}
+            >
+              <Text style={styles.forgotText}>Forgot your password?</Text>
+            </Pressable>
+          ) : null}
+          {tab === "signin" ? (
+            <Pressable
+              onPress={() => void handleResend()}
+              accessibilityRole="button"
+              accessibilityLabel="Resend the confirmation email"
+              hitSlop={8}
+              style={styles.forgot}
+            >
+              <Text style={styles.forgotText}>Resend confirmation email</Text>
+            </Pressable>
+          ) : null}
+
           {error ? (
             <View style={[styles.message, { borderLeftColor: colors.clay }]}>
               <Text style={styles.messageText}>{error}</Text>
@@ -199,7 +238,7 @@ export function AuthScreen() {
 
         <View style={styles.footer}>
           <Micro>Your life is the game.</Micro>
-          <Micro>50 XP an action</Micro>
+          <Micro>10 XP a practice</Micro>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -207,6 +246,8 @@ export function AuthScreen() {
 }
 
 const styles = StyleSheet.create({
+  forgot: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start" },
+  forgotText: { fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.sage, textDecorationLine: "underline" },
   flex: { flex: 1 },
   content: {
     flexGrow: 1,

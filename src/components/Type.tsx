@@ -1,11 +1,10 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Animated,
   Easing,
   Text,
   type StyleProp,
   type TextProps,
-  type TextStyle,
   type ViewStyle,
 } from "react-native";
 import { colors, fonts } from "../theme";
@@ -127,7 +126,7 @@ export function Rise({
   distance?: number;
   style?: StyleProp<ViewStyle>;
 }) {
-  const progress = useRef(new Animated.Value(0)).current;
+  const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const animation = Animated.timing(progress, {
@@ -177,7 +176,7 @@ export function Breathe({
   duration?: number;
   style?: StyleProp<ViewStyle>;
 }) {
-  const value = useRef(new Animated.Value(0)).current;
+  const [value] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loop = Animated.loop(

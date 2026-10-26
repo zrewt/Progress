@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useGame } from "../lib/game-context";
 import { adherenceFor, reviewDecision, reviewProposal, weekLabel } from "../lib/review";
-import { alpha, colors, fonts, hairline } from "../theme";
+import { alpha, colors, fonts } from "../theme";
 import { PrimaryButton, QuietButton } from "./Controls";
 import { Body, Display, Label, Micro } from "./Type";
 

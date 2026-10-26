@@ -126,6 +126,24 @@ test('weekly review, plan edits and replacement keep history intact', async(t)=>
   await assert.rejects(()=>rpc(db,'replace_practice',[season,newId,{...draft,branch:target.branch==='body'?'mind':'body'}]));
   await assert.rejects(()=>rpc(db,'replace_practice',[season,target.id,draft]));
  });
+ await t.test('consent is recorded and withdrawn by the owner only',async()=>{
+  await rpc(db,'record_ai_consent',['2026-10-01']);
+  const p=(await db.query('select ai_consent_version v, ai_consent_at at from public.profiles where id=$1',[A])).rows[0];
+  assert.equal(p.v,'2026-10-01'); assert.ok(p.at);
+  await rpc(db,'withdraw_ai_consent');
+  assert.equal((await db.query('select ai_consent_version v from public.profiles where id=$1',[A])).rows[0].v,null);
+  await assert.rejects(()=>rpc(db,'record_ai_consent',['']));
+  await rpc(db,'record_ai_consent',['2026-10-01']);
+ });
+ await t.test('daily generation quota is atomic and per user',async()=>{
+  const first=[]; for(let i=0;i<3;i++) first.push(await rpc(db,'consume_generation_quota',[2]));
+  assert.deepEqual(first,[true,true,false]);
+  assert.equal((await db.query('select used from public.generation_usage where user_id=$1',[A])).rows[0].used,3);
+  await asUser(db,B);
+  assert.equal((await db.query('select * from public.generation_usage')).rows.length,0);
+  assert.equal(await rpc(db,'consume_generation_quota',[2]),true);
+  await asUser(db);
+ });
  await t.test('history lists finished seasons and stays private',async()=>{
   await rpc(db,'end_season',[season,'completed']);
   const history=await rpc(db,'season_history');

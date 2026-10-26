@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   Animated,
   Easing,
@@ -26,7 +26,7 @@ function Leaf({
   burstId: number;
   fallDistance: number;
 }) {
-  const progress = useRef(new Animated.Value(0)).current;
+  const [progress] = useState(() => new Animated.Value(0));
   const left = (index * 47 + 9) % 100;
   const drift = ((index % 6) - 2.5) * 30;
   const delay = (index % 7) * 90;
@@ -94,7 +94,7 @@ export function Celebration() {
   const { celebration, dismissCelebration } = useGame();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const rise = useRef(new Animated.Value(0)).current;
+  const [rise] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (!celebration) return;

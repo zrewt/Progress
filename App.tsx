@@ -27,6 +27,7 @@ import { Dashboard } from "./src/components/Dashboard";
 import { LoadingScreen } from "./src/components/LoadingScreen";
 import { Onboarding } from "./src/components/Onboarding";
 import { SetupRequired } from "./src/components/SetupRequired";
+import { ResetPasswordScreen } from "./src/components/ResetPasswordScreen";
 import { colors } from "./src/theme";
 import { Body } from "./src/components/Type";
 import { PrimaryButton, QuietButton } from "./src/components/Controls";
@@ -34,12 +35,14 @@ import { PrimaryButton, QuietButton } from "./src/components/Controls";
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function Root() {
-  const { loading, user, profile, cloudEnabled, loadFailed, error, retryLoad, signOut } = useGame();
+  const { loading, user, profile, cloudEnabled, loadFailed, error, retryLoad, signOut, recovering } = useGame();
 
   return (
     <>
       {!cloudEnabled ? (
         <SetupRequired />
+      ) : recovering ? (
+        <ResetPasswordScreen />
       ) : loading ? (
         <LoadingScreen />
       ) : loadFailed && user ? (

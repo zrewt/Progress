@@ -88,13 +88,20 @@ Never put a Supabase **secret** key (`sb_secret_...`), `service_role` key, or
 
 ## Supabase setup
 
-1. Open **SQL Editor → New query** in your Supabase project.
-2. Paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql) and click **Run**.
+A fresh project can start from [`supabase/schema.sql`](supabase/schema.sql). An existing
+project must **not** re-run it (it contains destructive legacy cleanup): apply the files in
+[`supabase/migrations/`](supabase/migrations) in order instead, after a backup.
+
+1. Review each migration and its rollback note.
+2. Apply them in the SQL editor, newest last.
 3. Verify the tables and columns are live with:
 
    ```bash
    npm run db:check
    ```
+
+Nothing in this repository has been applied to the live project. The exact remaining
+database, function and auth steps are in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
 
 ## Scripts
 
@@ -104,9 +111,16 @@ npm run android       # open on an Android device/emulator
 npm run ios           # open on an iOS simulator (macOS)
 npm run web           # run in the browser
 npm run typecheck     # TypeScript, no emit
-npm run lint          # ESLint (existing findings are recorded in APP_STORE_READINESS.md)
+npm run lint          # ESLint; must stay at zero problems
+npm test              # unit + embedded-Postgres migration tests
+npm run safety:sync   # copy the canonical safety rules into the Edge Function
+npm run safety:check  # fail if that copy has drifted
+npm run test:rls      # live two-account isolation check (needs test accounts)
 npm run db:check      # verify the Supabase tables and columns exist
 ```
+
+CI runs install, `safety:check`, typecheck, lint and tests on every push
+([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
 ## Version control and backups
 
@@ -138,8 +152,16 @@ src/
   lib/
     types.ts                                 # app types (identities, blockers, branches, profile)
     pillars.ts                               # identities, blockers, goals, branches and time options
-    safety.ts                                # goal safety guardrails, node scrubber, 2-min seed downscaler
-    tree.ts                                  # XP, levels, streaks, unlocks, season, weekly review
+    safety-rules.ts                          # canonical safety rules shared with the Edge Function
+    safety.ts                                # client wrappers, PII scrubbing, node sanitizer
+    plans/                                   # 10 curated goal themes, variants, alternatives
+    progression.ts                           # XP, milestone days, local dates and streaks
+    today.ts                                 # today's practice, gaps, history, review timing
+    review.ts                                # deterministic weekly-review rules
+    offline-queue.ts                         # durable queue logic; offline-store.ts persists it
+    daily-data.ts                            # Supabase reads and owner-scoped RPC calls
+    config.ts                                # consent copy/version, support + privacy placeholders
+    tree.ts                                  # levels, tree presentation helpers
     supabase.ts                              # lazy client + AsyncStorage session
     game-context.tsx                         # auth, cloud persistence, XP/streak state
     gemini.ts                                # Edge Function client + Starting Seed Plan engine

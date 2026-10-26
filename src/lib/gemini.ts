@@ -765,6 +765,7 @@ export function normalizeTree(
  */
 export async function generateTree(
   answers: OnboardingAnswers,
+  options: { allowAi?: boolean } = {},
 ): Promise<TreeResult> {
   const safety = assessGoalSafety(answers.goal);
   if (!safety.safe) {
@@ -775,7 +776,7 @@ export async function generateTree(
   }
 
   const sb = getSupabase();
-  if (sb) {
+  if (sb && options.allowAi !== false) {
     try {
       const { data, error } = await sb.functions.invoke("generate-tree", {
         body: {

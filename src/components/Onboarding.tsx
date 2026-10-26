@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Animated,
   Easing,
@@ -40,6 +40,7 @@ import { assessGoalSafety } from "../lib/safety";
 import type { BlockerId, IdentityId, OnboardingAnswers } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { BotanicalBranch } from "./BotanicalBranch";
+import { ConsentSheet } from "./ConsentSheet";
 import { BrandMark } from "./BrandMark";
 import { Field, PrimaryButton, Rule } from "./Controls";
 import { PillarIcon } from "./PillarIcon";
@@ -249,7 +250,7 @@ function BlockerChip({
 }
 
 function ScanLine() {
-  const progress = useRef(new Animated.Value(0)).current;
+  const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -310,13 +311,16 @@ function GeneratingOverlay({
 }
 
 export function Onboarding() {
-  const { user, submitOnboarding, authBusy, signOut, error } = useGame();
+  const { user, submitOnboarding, authBusy, signOut, error, aiAllowed, recordConsent } = useGame();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Partial<OnboardingAnswers>>({
     blocker: "consistency",
   });
   const [preview, setPreview] = useState<TreeResult | null>(null);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [consentBusy, setConsentBusy] = useState(false);
+  const [allowAi, setAllowAi] = useState<boolean | null>(null);
   const [generating, setGenerating] = useState(false);
   const [planting, setPlanting] = useState(false);
   const [messageIndex, setMessageIndex] = useState(0);
@@ -381,15 +385,12 @@ export function Onboarding() {
       return;
     }
     if (step === 2) {
-      setGenerating(true);
-      setMessageIndex(0);
-      try {
-        const built = await generateTree(fullAnswers());
-        setPreview(built);
-        setStep(3);
-      } finally {
-        setGenerating(false);
+      // No AI call is possible before a recorded choice.
+      if (allowAi === null && !aiAllowed) {
+        setConsentOpen(true);
+        return;
       }
+      await buildPreview(allowAi ?? aiAllowed);
       return;
     }
     if (step === 3 && preview) {
@@ -402,17 +403,37 @@ export function Onboarding() {
     }
   }
 
-  async function handleMakeGentler() {
-    const gentlerBudget = "5";
-    setAnswers((value) => ({ ...value, timeBudget: gentlerBudget }));
+  async function buildPreview(useAi: boolean, overrideBudget?: string) {
     setGenerating(true);
     setMessageIndex(0);
     try {
-      const built = await generateTree(fullAnswers(gentlerBudget));
+      const built = await generateTree(fullAnswers(overrideBudget), { allowAi: useAi });
       setPreview(built);
+      setStep(3);
     } finally {
       setGenerating(false);
     }
+  }
+
+  async function handleMakeGentler() {
+    const gentlerBudget = "5";
+    setAnswers((value) => ({ ...value, timeBudget: gentlerBudget }));
+    await buildPreview(allowAi ?? aiAllowed, gentlerBudget);
+  }
+
+  async function acceptConsent() {
+    setConsentBusy(true);
+    const saved = await recordConsent();
+    setConsentBusy(false);
+    setAllowAi(saved);
+    setConsentOpen(false);
+    await buildPreview(saved);
+  }
+
+  async function declineConsent() {
+    setAllowAi(false);
+    setConsentOpen(false);
+    await buildPreview(false);
   }
 
   return (
@@ -712,12 +733,19 @@ export function Onboarding() {
         </Micro>
       </ScrollView>
 
+      <ConsentSheet
+        visible={consentOpen}
+        busy={consentBusy}
+        onAccept={() => void acceptConsent()}
+        onDecline={() => void declineConsent()}
+      />
+
       {generating || planting ? (
         <GeneratingOverlay
           title={
             planting
               ? "Planting your first\nseason."
-              : "Shaping your\nseed plan."
+              : "Shaping your\nfirst plan."
           }
           message={GENERATING_MESSAGES[messageIndex]}
         />

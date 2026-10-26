@@ -1,13 +1,16 @@
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { LogOut } from "lucide-react-native";
+import { LogOut, Settings } from "lucide-react-native";
 import { useGame } from "../lib/game-context";
 import { levelStats } from "../lib/tree";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { BrandMark } from "./BrandMark";
 import { Display } from "./Type";
+import { SettingsSheet } from "./SettingsSheet";
 
 export function TopBar() {
   const { profile, signOut } = useGame();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   if (!profile) return null;
 
   const stats = levelStats(profile.xp);
@@ -31,11 +34,20 @@ export function TopBar() {
           </View>
 
           <Pressable
+            onPress={() => setSettingsOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+            hitSlop={10}
+            style={({ pressed }) => [styles.signOut, { opacity: pressed ? 0.55 : 1 }]}
+          >
+            <Settings size={15} strokeWidth={1.6} color={colors.sage} />
+          </Pressable>
+          <Pressable
             onPress={() => void signOut()}
             accessibilityRole="button"
             accessibilityLabel="Sign out"
             hitSlop={10}
-            style={({ pressed }) => [styles.signOut, { opacity: pressed ? 0.55 : 1 }]}
+            style={({ pressed }) => [styles.iconButton, { opacity: pressed ? 0.55 : 1 }]}
           >
             <LogOut size={15} strokeWidth={1.6} color={colors.sage} />
           </Pressable>
@@ -53,6 +65,7 @@ export function TopBar() {
       <Text style={styles.xpNote} accessibilityLabel={`${xpInto} XP this level`}>
         {xpInto} XP
       </Text>
+      <SettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </View>
   );
 }
@@ -84,6 +97,7 @@ const styles = StyleSheet.create({
     height: 24,
     justifyContent: "center",
   },
+  iconButton: { paddingLeft: 10, height: 24, justifyContent: "center" },
   progressTrack: { height: 1, backgroundColor: alpha(colors.bone, 0.07) },
   progressFill: { height: 1, backgroundColor: alpha(colors.copper, 0.75) },
   xpNote: { display: "none" },

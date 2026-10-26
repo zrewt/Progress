@@ -12,7 +12,10 @@
     "export:web": "expo export --platform web",
     "db:check": "node --env-file=.env scripts/check-supabase.mjs",
     "lint": "expo lint",
-    "test": "tsx --test tests/*.test.ts tests/*.test.mjs"
+    "safety:sync": "node scripts/sync-safety.mjs",
+    "safety:check": "node scripts/sync-safety.mjs --check",
+    "test": "tsx --test tests/*.test.ts tests/*.test.mjs",
+    "test:rls": "node --env-file=.env scripts/rls-isolation.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/dm-mono": "^0.4.2",
@@ -22,7 +25,8 @@
     "@google/generative-ai": "^0.24.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.118.0",
-    "expo": "~57.0.30",
+    "expo": "~57.0.31",
+    "expo-asset": "~57.0.20",
     "expo-crypto": "~57.0.4",
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",

@@ -1,64 +1,18 @@
 import type { GeneratedNode, OnboardingAnswers } from "./types";
+import { assessGoal, validatePracticeText, CRISIS_RESOURCES } from "./safety-rules";
 
 export interface GoalSafetyAssessment {
   safe: boolean;
   reason?: string;
   suggestion?: string;
   coachingNote?: string;
+  /** Set when the goal needs support rather than a plan. */
+  support?: "self-harm" | "recovery";
 }
-
-interface SafetyRule {
-  pattern: RegExp;
-  reason: string;
-  suggestion: string;
-}
-
-const BLOCKED_GOAL_RULES: SafetyRule[] = [
-  {
-    pattern:
-      /\b(starv(e|ing|ation)|0 calories|zero calories|500 calories|purge|purging|throw up|laxative|(?:stop|not) eating\s+(?:anything|at all|food|for \d+ days|ever))\b/i,
-    reason:
-      "Safety check: extreme restriction harms your energy and long-term growth. Normal habits like stopping late-night snacking or cutting junk food are totally fine!",
-    suggestion: "Stop late-night snacking and eat balanced meals during the day",
-  },
-  {
-    pattern:
-      /\b(self[- ]?harm|hurt myself|cut myself|punish my body|bleed|suicid|kill myself|end my life)\b/i,
-    reason:
-      "Safety check: Vitality Tree only supports safe, life-affirming practices. If you are in distress, please reach out to 988 or a trusted person right now.",
-    suggestion: "Take care of my body and talk to one person I trust each day",
-  },
-  {
-    pattern:
-      /\b(sleep (0|1|2|3) hours|all[- ]?nighter every day|never sleep)\b/i,
-    reason:
-      "Counter-goal check: extreme sleep deprivation causes burnout within days.",
-    suggestion: "Get to bed on time and protect a steady sleep schedule",
-  },
-  {
-    pattern:
-      /\b(steroids|peds|anavar|tren|meth|heroin|cocaine|fentanyl)\b/i,
-    reason:
-      "Safety check: we can't build a growth tree around unsafe substances or compounds.",
-    suggestion: "Build a clean daily routine that boosts natural energy",
-  },
-];
-
-const GENTLE_COACHING_PATTERNS: { pattern: RegExp; note: string }[] = [
-  {
-    pattern:
-      /\b(100 miles|marathon tomorrow|every single hour|4 hours a day|5 hours a day|no rest days|work 16 hours|work 18 hours)\b/i,
-    note: "Ambitious goal! We scaled your starting seeds to fit your daily time budget so you build consistency without burning out.",
-  },
-  {
-    pattern: /\b(eat|eating|snack|sugar|junk food|diet|fasting|night)\b/i,
-    note: "Nutrition & evening habit goal: we'll focus on calm evening cues, hydration, and steady daytime energy.",
-  },
-];
 
 /**
- * Strips emails, phone numbers, and @handles from a goal string before it is
- * ever sent to an external AI model, protecting user privacy on free-tier keys.
+ * Strips emails, phone numbers and @handles from a goal before it is ever sent
+ * to an external model. This reduces accidental sharing; it is not anonymisation.
  */
 export function scrubGoalForPrivacy(goal: string): string {
   return goal
@@ -68,47 +22,26 @@ export function scrubGoalForPrivacy(goal: string): string {
     .trim();
 }
 
-/**
- * Evaluates a user's 30-day goal before any tree is generated.
- * Blocks unsafe, self-harmful, or burnout-inducing goals and suggests a healthy reframe.
- */
+/** Safety decision for a goal, in the shape the onboarding screens already use. */
 export function assessGoalSafety(rawGoal: string): GoalSafetyAssessment {
-  const clean = rawGoal.trim();
-  if (clean.length < 3) {
-    return {
-      safe: false,
-      reason: "Write at least a few words describing the change you want in 30 days.",
-    };
+  const verdict = assessGoal(rawGoal);
+  if (verdict.kind === "decline") {
+    return { safe: false, reason: verdict.message, suggestion: verdict.reframe };
   }
-
-  for (const rule of BLOCKED_GOAL_RULES) {
-    if (rule.pattern.test(clean)) {
-      return {
-        safe: false,
-        reason: rule.reason,
-        suggestion: rule.suggestion,
-      };
-    }
+  if (verdict.kind === "support" && verdict.support === "self-harm") {
+    return { safe: false, reason: verdict.message, support: "self-harm" };
   }
-
-  for (const item of GENTLE_COACHING_PATTERNS) {
-    if (item.pattern.test(clean)) {
-      return {
-        safe: true,
-        coachingNote: item.note,
-      };
-    }
+  if (verdict.kind === "support") {
+    return { safe: true, support: "recovery", coachingNote: verdict.message };
   }
-
   return {
     safe: true,
     coachingNote:
-      "Safety & pacing verified: every tier starts with a 2-minute seed and stays inside your daily time budget.",
+      "Every practice has a version you could do on your hardest day, and it always fits the time you chose.",
   };
 }
 
-const UNSAFE_NODE_WORDS =
-  /\b(starve|skip meals|fast for 24|push through sharp pain|ignore pain|sleep less|all-nighter|punish|vape|gamble|bet|max out until failure)\b/i;
+export { CRISIS_RESOURCES };
 
 function maxMinutesForBudget(budget: string) {
   if (budget === "5") return 5;
@@ -116,11 +49,7 @@ function maxMinutesForBudget(budget: string) {
   return 30;
 }
 
-export function clampDurationToBudget(
-  duration: string,
-  tier: number,
-  budget: string,
-): string {
+export function clampDurationToBudget(duration: string, tier: number, budget: string): string {
   const cap = tier === 0 ? Math.min(3, maxMinutesForBudget(budget)) : maxMinutesForBudget(budget);
   const match = duration.match(/(\d+)/);
   const parsed = match ? parseInt(match[1], 10) : tier === 0 ? 2 : 10;
@@ -128,10 +57,7 @@ export function clampDurationToBudget(
   return `${safeMinutes} min`;
 }
 
-/**
- * Scrubs any AI-generated node so it never prescribes unsafe actions,
- * medical claims, or durations that violate the user's time budget.
- */
+/** Replaces any generated node whose text fails the shared output validation. */
 export function sanitizeGeneratedNode(
   candidate: GeneratedNode,
   fallback: GeneratedNode,
@@ -139,13 +65,9 @@ export function sanitizeGeneratedNode(
   answers: OnboardingAnswers,
 ): GeneratedNode {
   const combined = `${candidate.title} ${candidate.description} ${candidate.instructions.join(" ")}`;
-  if (UNSAFE_NODE_WORDS.test(combined)) {
-    return {
-      ...fallback,
-      duration: clampDurationToBudget(fallback.duration, tier, answers.timeBudget),
-    };
+  if (!validatePracticeText(combined).ok) {
+    return { ...fallback, duration: clampDurationToBudget(fallback.duration, tier, answers.timeBudget) };
   }
-
   return {
     title: candidate.title.slice(0, 60),
     duration: clampDurationToBudget(candidate.duration, tier, answers.timeBudget),
@@ -154,16 +76,9 @@ export function sanitizeGeneratedNode(
   };
 }
 
-/**
- * Generates a 2-minute "Seed version" of any practice for low-energy days,
- * so the user never has to break their rhythm or push into burnout.
- */
-export function twoMinuteSeedVersion(node: {
-  title: string;
-  instructions: string[];
-}): { duration: string; instructions: string[]; note: string } {
-  const firstStep =
-    node.instructions[0] ?? `Set a 2-minute timer and begin ${node.title.toLowerCase()}.`;
+/** A two-minute version of any practice, for the onboarding preview. */
+export function twoMinuteSeedVersion(node: { title: string; instructions: string[] }) {
+  const firstStep = node.instructions[0] ?? `Set a two-minute timer and begin ${node.title.toLowerCase()}.`;
   return {
     duration: "2 min",
     instructions: [
@@ -171,6 +86,6 @@ export function twoMinuteSeedVersion(node: {
       "Do only two calm minutes — stop while it still feels easy.",
       "Bank the repetition. Showing up keeps the branch alive.",
     ],
-    note: "Shrunk to a 2-minute seed: protects your consistency on a hard day.",
+    note: "Shrunk to a two-minute version: protects your consistency on a hard day.",
   };
 }

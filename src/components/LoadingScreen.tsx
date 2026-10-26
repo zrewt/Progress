@@ -1,11 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { colors, hairline } from "../theme";
 import { BrandMark } from "./BrandMark";
 import { Breathe, DisplayItalic } from "./Type";
 
 export function LoadingScreen() {
-  const progress = useRef(new Animated.Value(0)).current;
+  const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loop = Animated.loop(

@@ -57,4 +57,7 @@ export class DailyData {
   }
   endSeason(seasonId: string, status: "completed" | "archived") { return this.rpc<null>("end_season", { p_season_id: seasonId, p_status: status }); }
   history() { return this.rpc<SeasonHistoryEntry[]>("season_history", {}); }
+  recordConsent(version: string) { return this.rpc<null>("record_ai_consent", { p_version: version }); }
+  withdrawConsent() { return this.rpc<null>("withdraw_ai_consent", {}); }
+  setTimezone(timezone: string, name?: string | null) { return this.rpc<null>("update_preferences", { p_timezone: timezone, p_display_name: name ?? null }); }
 }

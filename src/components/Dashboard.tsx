@@ -17,7 +17,7 @@ import { EditPlanSheet, SeasonHistory, SeasonSummarySheet } from "./PlanSheets";
 import { TopBar } from "./TopBar";
 
 export function Dashboard() {
-  const { user, profile, nodes, today, error, clearError, undoOffer, undoEvent, dismissUndo, retryLoad } = useGame();
+  const { user, profile, nodes, today, error, clearError, undoOffer, undoEvent, dismissUndo, retryLoad, queueCount, syncState, syncNow } = useGame();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const wide = width >= 900;
@@ -144,6 +144,23 @@ export function Dashboard() {
             <QuietButton label="Finish this season" onPress={() => setFinishing(true)} style={{ flex: 1 }} />
           </View>
           <SeasonHistory />
+          <View style={styles.syncRow}>
+            <View style={[styles.syncDot, { backgroundColor: syncState === "error" ? colors.clay : syncState === "idle" ? colors.lichen : colors.ochre }]} />
+            <Text style={styles.syncText} accessibilityRole="text">
+              {syncState === "idle"
+                ? "Everything is saved"
+                : syncState === "syncing"
+                  ? `Sending ${queueCount} ${queueCount === 1 ? "entry" : "entries"}…`
+                  : syncState === "error"
+                    ? `${queueCount} ${queueCount === 1 ? "entry is" : "entries are"} waiting to sync`
+                    : `${queueCount} saved on this device, waiting to sync`}
+            </Text>
+            {syncState === "idle" ? null : (
+              <Pressable onPress={() => void syncNow()} accessibilityRole="button" accessibilityLabel="Try syncing now" hitSlop={10} style={styles.syncRetry}>
+                <Text style={styles.syncRetryText}>Try now</Text>
+              </Pressable>
+            )}
+          </View>
           <Pressable onPress={() => void retryLoad()} accessibilityRole="button" accessibilityLabel="Refresh your journal" style={styles.refresh}>
             <Text style={styles.refreshText}>Refresh</Text>
           </Pressable>
@@ -211,6 +228,11 @@ const styles = StyleSheet.create({
   undoText: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.sage },
   footerBlock: { marginTop: 26 },
   footerActions: { flexDirection: "row", gap: 9 },
+  syncRow: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 14 },
+  syncDot: { height: 5, width: 5, borderRadius: 3 },
+  syncText: { flex: 1, fontFamily: fonts.sans, fontSize: 10.5, color: colors.sage },
+  syncRetry: { minHeight: 36, justifyContent: "center", paddingHorizontal: 4 },
+  syncRetryText: { fontFamily: fonts.sansMedium, fontSize: 10.5, color: colors.copperLight, textDecorationLine: "underline" },
   refresh: { minHeight: 44, justifyContent: "center", marginTop: 4 },
   refreshText: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.sageDim },
   footer: { marginTop: 30, paddingTop: 18, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hairline, gap: 8 },
