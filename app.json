@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Vitality Tree",
+    "slug": "vitality-tree",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "vitalitytree",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#11140F",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.vitalitytree.mobile"
+    },
+    "android": {
+      "package": "app.vitalitytree.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#11140F",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#11140F"
+        }
+      ]
+    ]
+  }
+}

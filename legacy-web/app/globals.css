@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background-color: #11140f;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E"),
+    radial-gradient(70rem 46rem at 62% -18%, rgba(193, 120, 69, 0.07), transparent 66%),
+    linear-gradient(180deg, #13160f 0%, #11140f 45%, #0f120d 100%);
+  background-attachment: fixed;
+  color: #e9e2d0;
+  font-feature-settings: "ss01" on;
+}
+
+::selection {
+  background: rgba(193, 120, 69, 0.55);
+  color: #f4efe2;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(169, 164, 143, 0.35) transparent;
+}
+
+@layer base {
+  h1,
+  h2,
+  h3 {
+    @apply font-display font-normal;
+    letter-spacing: -0.015em;
+  }
+}
+
+@layer components {
+  .page {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-6 lg:px-8;
+  }
+
+  .panel {
+    @apply border border-bone/10 bg-ink-850/70;
+  }
+
+  .micro {
+    @apply font-mono text-[10px] font-normal uppercase tracking-[0.14em] text-sage;
+  }
+
+  .micro-dim {
+    @apply font-mono text-[10px] font-normal uppercase tracking-[0.13em] text-sage-dim;
+  }
+
+  .btn-primary {
+    @apply inline-flex min-h-12 items-center justify-center gap-2.5 rounded-xs bg-copper px-6 py-3 text-[13.5px] font-semibold tracking-wide text-ink-950 transition-colors duration-200 hover:bg-copper-light disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-quiet {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xs border border-bone/20 px-5 py-2.5 text-[12px] font-medium text-bone transition-colors duration-200 hover:border-bone/40 hover:bg-bone/[0.04] disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .field {
+    @apply w-full appearance-none border-0 border-b border-bone/20 bg-transparent py-3 text-[15px] text-bone placeholder:text-sage-deep focus:border-copper focus:outline-none focus:ring-0;
+  }
+
+  .focus-ring {
+    @apply outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-copper;
+  }
+
+  .link-quiet {
+    @apply text-sage underline decoration-sage/40 underline-offset-4 transition-colors hover:text-bone hover:decoration-bone/60;
+  }
+
+  .branch-line {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: draw 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .safe-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .hairline {
+    border-color: rgba(233, 226, 208, 0.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
