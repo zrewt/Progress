@@ -318,7 +318,9 @@ export function Onboarding() {
     blocker: "consistency",
   });
   const [preview, setPreview] = useState<TreeResult | null>(null);
-  const [consentOpen, setConsentOpen] = useState(false);
+  // Asked once, before the first question, so the plan appears the moment the
+  // last answer is given instead of interrupting the payoff with a decision.
+  const [consentOpen, setConsentOpen] = useState(!aiAllowed);
   const [consentBusy, setConsentBusy] = useState(false);
   const [allowAi, setAllowAi] = useState<boolean | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -385,11 +387,8 @@ export function Onboarding() {
       return;
     }
     if (step === 2) {
-      // No AI call is possible before a recorded choice.
-      if (allowAi === null && !aiAllowed) {
-        setConsentOpen(true);
-        return;
-      }
+      // The choice was made up front, and an unanswered sheet can only be
+      // dismissed into the on-device plan, so no AI call can precede a decision.
       await buildPreview(allowAi ?? aiAllowed);
       return;
     }
@@ -427,13 +426,11 @@ export function Onboarding() {
     setConsentBusy(false);
     setAllowAi(saved);
     setConsentOpen(false);
-    await buildPreview(saved);
   }
 
-  async function declineConsent() {
+  function declineConsent() {
     setAllowAi(false);
     setConsentOpen(false);
-    await buildPreview(false);
   }
 
   return (
@@ -737,7 +734,7 @@ export function Onboarding() {
         visible={consentOpen}
         busy={consentBusy}
         onAccept={() => void acceptConsent()}
-        onDecline={() => void declineConsent()}
+        onDecline={declineConsent}
       />
 
       {generating || planting ? (

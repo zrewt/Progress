@@ -1,4 +1,4 @@
-import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check, X } from "lucide-react-native";
 import { AI_CONSENT_COPY } from "../lib/config";
@@ -26,7 +26,10 @@ export function ConsentSheet({
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} bounces={false}>
             <View style={styles.head}>
               <Display style={styles.title}>{AI_CONSENT_COPY.title}</Display>
-              <X size={18} strokeWidth={1.6} color={colors.sage} />
+              {/* Dismissing without answering is a decline: no consent, no AI call. */}
+              <Pressable onPress={onDecline} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close and build the plan on this device">
+                <X size={18} strokeWidth={1.6} color={colors.sage} />
+              </Pressable>
             </View>
 
             <Label style={{ marginTop: 4 }}>What is sent</Label>
