@@ -4,7 +4,13 @@
 //   supabase functions deploy generate-tree
 // Never put keys in this file or in the app bundle.
 
-import { assessGoal, validatePracticeText, validateStepsWithinBudget } from "./safety-rules.ts";
+import {
+  assessGoal,
+  genericFiller,
+  repeatedStep,
+  validatePracticeText,
+  validateStepsWithinBudget,
+} from "./safety-rules.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -24,6 +30,7 @@ interface RequestPayload {
   history?: unknown;
   focus?: string;
   branch?: string;
+  startingPoint?: string;
 }
 
 interface History {
@@ -111,24 +118,14 @@ async function rest<T>(path: string, authorization: string, init: RequestInit = 
   return (await res.json().catch(() => null)) as T | null;
 }
 
-/**
- * Placeholder steps that fit every goal therefore help none. They are the exact
- * wording the engine used to fall back on, and the reason plans read as generic.
- * Rejecting them makes "specific" a rule the server enforces, not a hope.
- */
-const GENERIC_FILLER: [RegExp, string][] = [
-  [/\bedit (a|the) file\b/i, "edit a file"],
-  [/\bwork on your (project|goal)\b/i, "work on your project"],
-  [/\breset your (shoulders|body|mind)\b/i, "reset your shoulders"],
-  [/\bcheck in with yourself\b/i, "check in with yourself"],
-  [/\breflect on your (progress|day|journey)\b/i, "reflect on your progress"],
-  [/\bopen (the|your) (code )?editor\b/i, "open the editor"],
-];
-
-function genericFiller(text: string): string | null {
-  return GENERIC_FILLER.find(([pattern]) => pattern.test(text))?.[1] ?? null;
-}
-
+const STAGES: Record<string, string> = {
+  nothing:
+    "starting from nothing — the first version does not exist yet. Week 1 has to remove the biggest unknown before anything is built.",
+  exists:
+    "something already exists — it is unfinished, unlaunched or not yet used. Week 1 starts from what they have, not from a blank page.",
+  practice:
+    "no artefact to make; they want to do more of something, do it better, or feel different. Week 1 measures where they are now.",
+};
 function historyBlock(history: History | null) {
   if (!history) return "- This is their first season. Write for someone starting from zero.\n";
   const lines = [
@@ -149,59 +146,102 @@ function historyBlock(history: History | null) {
 }
 
 /**
- * A building goal is not "do some work on it". The four branches have to carry
- * the whole job — understanding the problem, making the smallest usable thing,
- * putting it in front of someone, and getting it out — or the plan is advice
- * about being productive instead of a plan for the product.
+ * The spine of a making goal, spelled out by artefact. Without this the model
+ * writes four weeks of "work on it", which is why plans read as advice about
+ * being productive rather than a plan for the thing being made.
  */
+const ARTEFACT_ARCS = `
+- app / website / software: the problem and the people who have it, then one screen working end to end, then five people using it, then fixing the one thing that stopped them and putting a build somewhere it can be installed.
+- book / essay / newsletter: the promise and who it is for, then five hundred finished words, then one honest reader, then the revision their notes demand.
+- course / podcast / channel: the promise and the audience, then the first lesson or episode finished, then three real listeners, then fixing the weakest part and publishing on a schedule.
+- business / service / product: ten people with the problem, then the offer written on one page, then one pilot or paying customer, then delivering it and fixing the promise that was hardest to keep.
+- skill being learned: a baseline test, then the repeatable session, then using it in front of somebody, then teaching it back or passing the real test.`;
+
 function buildingBlock(branch: string) {
   if (branch !== "craft") return "";
   return `
-HOW A BUILDING PLAN SPENDS ITS FOUR BRANCHES
-- craft: the actual build. Name the screen, form, endpoint, data model, import, bug that blocks the demo, or the deploy. Not "the editor".
-- mind: research and decisions. Three people who have the problem and what they do today, the two alternatives they already use, the docs for the tool you do not understand, the list of what to cut.
-- connection: the people it is for. One tester, one feedback conversation, one post, one launch message, one person asked to try it.
-- body: the routine that makes a thirty-day build survivable. Walk to think, stand between sessions, stop before the point where tomorrow is ruined.
-The four weeks tell one story: understand the problem, build the smallest usable version, put it in front of someone, then improve it or show it. Week 4 must point at something that exists by then, not a plan to make it later. A step is only useful if it would change what the person does today.
+THE ARC FOR WHAT THEY ARE MAKING — pick the line that matches, and make the four craft stages its four steps
+${ARTEFACT_ARCS}
+For a building goal the other three branches keep the job they have: body is the routine that makes a thirty-day build survivable, mind is the research and the decisions, connection is the people it is for. A step is only useful if it would change what the person does today.
 `;
 }
 
+
 function buildPrompt(
-  p: { identity: string; goal: string; blocker: string; timeBudget: string; focus: string; branch: string },
+  p: {
+    identity: string;
+    goal: string;
+    blocker: string;
+    timeBudget: string;
+    focus: string;
+    branch: string;
+    stage: string;
+  },
   history: History | null,
 ) {
   return `You are the plan writer for a 30-day habit app. You are writing one specific person's plan, not a plan for a category of person. Return JSON only.
 
 WHO THIS IS
 - Becoming: ${p.identity}
-- Their 30-day goal, in their words: "${p.goal}"
+- Their 30-day goal, in their own words: "${p.goal}"
+- Where they are starting: ${p.stage}
 - What gets in the way on a bad day: ${p.blocker}
 - Time available per day: ${p.timeBudget} minutes. Nothing you write may ask for longer.
 - This goal reads as: ${p.focus}
-- The daily practice must sit on the ${p.branch} branch${p.branch === "craft" ? " — they are making something they do not have yet, so the plan is about building it, not about their own health or habits" : ""}.
+- The daily practice sits on the ${p.branch} branch${p.branch === "craft" ? " — they are making something, so the plan is about building it, not about their own health or habits" : ""}.
 ${historyBlock(history)}
-HOW TO WRITE A STEP — this is the whole job
-A step is a physical or on-screen action this person could take tomorrow with things they already have, described in words they would use.
-Every practice and every step must name the real thing: the actual screen, file, instrument, chapter, place or person.
-Never write anything that would fit any goal: "edit a file", "work on your project", "reset your shoulders", "take a breath", "check in with yourself", "reflect on your progress", "review your notes". If you catch yourself writing a placeholder, replace it with the specific act a good coach would name for this goal.
-When the goal is to make something — an app, a book, a course, a service for other people — the subject of the plan is that artefact. Do not convert it into the person's own diet, sleep or exercise routine just because the artefact mentions food, running or health. A person building an app that helps others eat better needs steps about scoping a screen, talking to three people who would use it, choosing what to cut, and shipping one small thing — not steps about their own cravings.
-If a branch does not obviously touch their goal, find the honest link and still name their real materials. For a mental, study or craft goal the Body practice must serve that goal — a walk while rehearsing the exact loop they have to write, ten minutes of posture work before a long session at their desk — never a generic stretch or breath. For a physical goal, Mind and Connection must still name their actual training, kit and people.
+STEP 1 — WORK OUT WHAT THIS GOAL ACTUALLY TAKES, BEFORE YOU WRITE A PRACTICE (returned as "brief")
+Five short lines, each concrete, no encouragement:
+- "outcome": what exists or is true on day 30 that is not true today.
+- "method": how this is really done, named — the approach a good coach or practitioner would use for this exact goal (walk-run intervals for a first 5K; one screen tested by five people for an app; spaced recall for vocabulary). Use what is genuinely known. Never invent a statistic, study or citation: when you are unsure, name the action instead of asserting a fact.
+- "week_one": what someone who has done this before would do in the first seven days, as acts.
+- "trap": the specific way this goal usually fails, and the smallest countermeasure.
+- "research": the two or three things they must find out for this plan to work, and exactly where to look — which documentation, which three people to ask, which competitor's onboarding, which coach or course. Empty only when the goal needs no research.
 
-FOUR BRANCHES, FOUR WEEKS — the shape is a ramp
-body, mind, craft, connection, in that order. Four nodes each.
-- Node 1 is week 1: the smallest real version of that branch's practice. Repeatable tomorrow, comfortable on a bad day, inside ${p.timeBudget} minutes.
-- Node 2 is week 2: the same practice, one concrete step further. Node 3 is week 3. Node 4 is week 4.
-- Each node must be recognisably the same practice as the one before it, harder or more specific — never a different activity.
-- Make the ramp visible: the week-4 node should be something they could not have done in week 1.
+STEP 2 — THE BRIEF DRIVES THE PLAN
+Outcome shapes week 4. Week_one shapes week 1. The trap shapes the two-minute version. The research becomes real steps on the mind branch, naming the source. If a step would still make sense under a different brief, it is filler: replace it.
+
+STEP 3 — THE PRIMARY BRANCH IS THE SPINE: FOUR DELIBERATELY DIFFERENT STAGES
+${p.branch.toUpperCase()} carries the goal itself, and its four nodes are the four stages below, each handing the next one something it needs. Never repeat stage 1 with a bigger number.
+1. find out — the reading, decision, conversation or test that removes the biggest unknown. Name what to read, who to ask, what to try.
+2. the smallest real version — the first thing that works end to end, small enough to finish in one week.
+3. the real world — a tester, a reader, the actual distance, the coach's eyes, the first session in front of someone.
+4. respond — fix the one thing stage 3 taught them, or finish the thing that now exists.
+A goal with no artefact (train, practise, learn, feel better) keeps the same four stages: measure where you are, the repeatable session, the harder real-world version, proof that it held.
 ${buildingBlock(p.branch)}
+THE OTHER THREE BRANCHES ARE SUPPORT: ONE PRACTICE, DEEPENING
+Each is one honest practice that makes the spine possible — the same act one step further each week, never a different activity. Each node still fits inside ${p.timeBudget} minutes and is comfortable on a bad day.
+- body: the physical side of this exact work — the walk that untangles the problem, forearm and shoulder work before a long session at the desk, the easy shake-out after a hard effort. Never a generic stretch.
+- mind: attention and knowledge for this goal — the specific chapter, the specific documentation page, thirty minutes without a screen, an honest look at last week's actual work.
+- connection: the real people — one tester, one honest reader, one training partner, one person who asks how it is going.
+If a branch has no obvious link, find the honest one and still name their real materials. No step may be interchangeable with a step on another branch.
+
+HOW A STEP IS WRITTEN — the difference from a generic plan is information, not tone
+A step is one physical or on-screen action this person could take tomorrow with what they already have, in words they would use, at most 18 words.
+Every step names the concrete thing: the screen, form, endpoint, file, chapter, route, lift, ingredient, person, place or number.
+Apply this test to every step: could it appear in someone else's plan for a different goal? If yes, rewrite it until it could only be theirs.
+Never write these, which fit any goal and therefore help nobody: "open the editor", "edit a file", "write five lines", "work on your project", "make progress", "do some research", "save your progress", "review your notes", "check in with yourself", "reflect on your progress", "stay consistent", "be kind to yourself", "reset your shoulders".
+Never make "consider", "think about", "explore" or "try to" the action.
+When the goal is to make something, the subject of the plan is that artefact. Do not convert it into the person's own diet, sleep or exercise routine just because the artefact mentions food, running or health.
+
+WORKED PAIRS — a lazy draft and the same line written properly
+Goal: build an app that helps people eat healthier.
+- WRONG: "Open the editor and write 5 lines." RIGHT: "Sketch the one screen the app opens to and list the three things on it."
+- WRONG: "Do some research on the market." RIGHT: "Message three people who used a food-tracking app and ask what made them stop."
+- WRONG: "Work on your project for 15 minutes." RIGHT: "Fix the meal-logging step two of your three testers got stuck on, then send them build 2."
+Goal: run 5K without stopping.
+- WRONG: "Go for a run and push yourself." RIGHT: "Walk 2 minutes, jog 1, repeat six times, and stop while you could still talk."
+- Week 4: "Run the full 5K route at easy pace and note where your breathing broke first."
+
 EACH BRANCH ALSO NEEDS A TWO-MINUTE VERSION
-"easy" is the smallest honest version of that branch's week-1 practice: one to three steps, no setup, no equipment, no decisions. It is its own action, not the full node cut in half.
+"easy" is the smallest honest version of that branch's week-1 practice: one to three steps, no setup, no equipment, no decisions. Its own action, not the full node cut in half.
 
-WHAT THE PERSON WILL SEE FIRST
-The summary is shown as the promise of the plan, above the practices. It must say what will exist at the end of these 30 days that does not exist now, and the smallest daily act that gets them there. The first instruction of each branch is shown as "your first action", and the week-4 node as "where this leads", so both have to stand on their own.
+WHAT THE PERSON SEES FIRST
+The summary is shown as the promise of the plan, above the practices. It must say what will exist at the end of these 30 days that does not exist now, plus the smallest daily act that gets them there — specific enough that a stranger could tell what they are building or training for. The first step of each branch is shown as "your first action", and the week-4 node as "where this leads", so both must stand alone.
 
-JSON — exactly this shape, nothing around it:
-{"summary":"what will exist at the end of 30 days that does not exist now, plus the smallest daily act that gets them there; max 300 characters; plain language; no vague encouragement",
+JSON — exactly this shape, nothing around it. Write "brief" first: the plan must follow it.
+{"brief":{"outcome":"max 140 characters","method":"max 160","week_one":"max 160","trap":"max 140","research":["one to three entries, max 120 each, or empty"]},
+ "summary":"what will exist at the end of 30 days that does not exist now, plus the smallest daily act that gets them there; max 300 characters; plain language; no vague encouragement",
  "safetyNote":"max 240 characters; pacing and stopping; no medical advice",
  "pillars":[
   {"pillar":"body","focus":"max 48 characters — the specific angle this goal gives the body branch",
@@ -219,6 +259,7 @@ function validateTree(raw: unknown, budget: number): string | null {
   if (typeof tree.safetyNote !== "string" || tree.safetyNote.length > 240) return "bad safety note";
   if (!Array.isArray(tree.pillars) || tree.pillars.length !== 4) return "wrong pillar count";
   const order = ["body", "mind", "craft", "connection"];
+  const branchSteps: { name: string; steps: string[] }[] = [];
   for (const [index, rawPillar] of tree.pillars.entries()) {
     const pillar = rawPillar as { pillar?: unknown; focus?: unknown; nodes?: unknown; easy?: unknown };
     if (pillar?.pillar !== order[index]) return "wrong pillar order";
@@ -255,8 +296,12 @@ function validateTree(raw: unknown, budget: number): string | null {
       if (filler) return `generic filler: ${filler}`;
       const budgetCheck = validateStepsWithinBudget(steps, budget);
       if (!budgetCheck.ok) return budgetCheck.problem ?? "steps over budget";
+      branchSteps.push({ name: `the ${order[index]} branch`, steps });
     }
   }
+  // A step copied across branches was not written for either of them.
+  const repeated = repeatedStep(branchSteps);
+  if (repeated) return `repeated step: ${repeated.step}`;
   return null;
 }
 
@@ -300,6 +345,10 @@ Deno.serve(async (req: Request) => {
   const branch = ["body", "mind", "craft", "connection"].includes(String(body.branch))
     ? String(body.branch)
     : "craft";
+  const stageKey = String(body.startingPoint ?? "");
+  // Anything the client sends is a hint, not a claim: unknown values fall back
+  // to the one that makes no assumption about what already exists.
+  const stage = STAGES[stageKey] ?? STAGES.nothing;
 
   const verdict = assessGoal(goal);
   if (verdict.kind === "decline") return respond({ error: verdict.message ?? "That goal cannot be supported." }, 400);
@@ -326,16 +375,18 @@ Deno.serve(async (req: Request) => {
 
   const model = env("GEMINI_MODEL") || "gemini-2.5-flash";
   const prompt = buildPrompt(
-    { identity, goal, blocker, timeBudget, focus: focus || "a personal practice", branch },
+    { identity, goal, blocker, timeBudget, focus: focus || "a personal practice", branch, stage },
     readHistory(body.history),
   );
   const budget = Number(timeBudget);
 
-  // One controlled retry. A rejected draft that failed on filler is retried with
-  // that named as a correction, because resending the same prompt repeats the
-  // same wording; any other rejection is retried unchanged, then the client falls
-  // back to the local library.
+  // One controlled retry. A draft rejected for placeholder wording or a step
+  // reused across branches is retried with that named as a correction, because
+  // resending the same prompt tends to reproduce the same wording. Any other
+  // rejection is retried unchanged, then the client falls back to the local
+  // library.
   const FILLER_PREFIX = "generic filler: ";
+  const REPEAT_PREFIX = "repeated step: ";
   let correction = "";
   // Tells the client whether to say "the draft was rejected" or "we could not
   // reach the model", which are different problems for the person to act on.
@@ -351,6 +402,8 @@ Deno.serve(async (req: Request) => {
       console.error("Rejected model output", { problem });
       if (problem.startsWith(FILLER_PREFIX)) {
         correction = `The previous draft used placeholder wording ("${problem.slice(FILLER_PREFIX.length)}"), which fits any goal and therefore helps nobody. Rewrite every practice and step so it names this person's actual screens, files, tools, subjects or people. Do not use that wording again.`;
+      } else if (problem.startsWith(REPEAT_PREFIX)) {
+        correction = `The previous draft reused the same instruction on more than one branch ("${problem.slice(REPEAT_PREFIX.length)}"). Each branch must do a different job: the primary branch advances the goal through its four stages, body serves the work, mind serves the knowledge, connection serves the people. Rewrite the duplicated branch.`;
       }
     }
   }

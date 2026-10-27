@@ -60,3 +60,6 @@ screenshots/*
 
 # Local lint output
 .eslintcache
+
+# Supabase CLI local state
+supabase/.temp/

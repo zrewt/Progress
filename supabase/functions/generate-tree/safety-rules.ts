@@ -140,6 +140,70 @@ export function validatePracticeText(text: string): { ok: boolean; problem?: str
   return { ok: true };
 }
 
+/**
+ * Wording that fits every goal and therefore helps none. A plan that says
+ * "open the editor and write five lines" has not been written for this person.
+ * These are rejected rather than discouraged, because a prompt that only asks
+ * for specificity gets ignored on the day the model is lazy.
+ */
+export const GENERIC_STEP_PATTERNS: [RegExp, string][] = [
+  [/\bedit (a|the|your) (file|code)\b/i, "edit a file"],
+  [/\bwrite (5|five|a few) lines\b/i, "write five lines"],
+  [/\bopen (the|your) (code )?editor\b/i, "open the editor"],
+  [/\bwork on (your|the) (project|goal|app|thing)\b/i, "work on your project"],
+  [/\bmake (some |a little )?progress\b/i, "make progress"],
+  [/\bdo some research\b/i, "do some research"],
+  [/\breset your (shoulders|body|mind)\b/i, "reset your shoulders"],
+  [/\bcheck in with yourself\b/i, "check in with yourself"],
+  [/\breflect on (your|the) (progress|day|journey|week)\b/i, "reflect on your progress"],
+  [/\breview your notes\b/i, "review your notes"],
+  [/\bsave your progress\b/i, "save your progress"],
+  [/\bthe seed is planted\b/i, "the seed is planted"],
+  [/\bcelebrate (your|the) (win|wins|progress|promise|success)\b/i, "celebrate"],
+  [/\bkeep going\b/i, "keep going"],
+  [/\bstay (motivated|consistent|positive|focused)\b/i, "stay motivated"],
+  [/\bbe kind to yourself\b/i, "be kind to yourself"],
+  [/\bdo your best\b/i, "do your best"],
+];
+
+/** The placeholder this text uses, or null when it names something real. */
+export function genericFiller(text: string): string | null {
+  return GENERIC_STEP_PATTERNS.find(([pattern]) => pattern.test(text))?.[1] ?? null;
+}
+
+function comparableStep(step: string): string {
+  return step
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * A step copied onto two branches is a step written for no branch. Short
+ * instructions are skipped because "Set a timer" is legitimately shared.
+ */
+export function repeatedStep(
+  branches: { name: string; steps: string[] }[],
+): { step: string; branches: string[] } | null {
+  const seen = new Map<string, { text: string; branches: Set<string> }>();
+  for (const branch of branches) {
+    for (const step of branch.steps) {
+      const key = comparableStep(step);
+      if (key.length < 20) continue;
+      const entry = seen.get(key) ?? { text: step, branches: new Set<string>() };
+      entry.branches.add(branch.name);
+      seen.set(key, entry);
+    }
+  }
+  for (const entry of seen.values()) {
+    if (entry.branches.size > 1) {
+      return { step: entry.text, branches: [...entry.branches] };
+    }
+  }
+  return null;
+}
+
 export const MINUTES_IN_TEXT = /\b(\d+)\s*(?:min|mins|minute|minutes|hr|hrs|hour|hours)\b/gi;
 
 /** Every step must fit inside the daily budget. */

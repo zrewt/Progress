@@ -20,6 +20,8 @@ jobs:
         run: npm run safety:check
       - name: Typecheck
         run: npm run typecheck
+      - name: Typecheck Edge Functions
+        run: npm run typecheck:functions
       - name: Lint
         run: npm run lint
         env:

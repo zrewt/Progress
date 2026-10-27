@@ -9,6 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "typecheck:functions": "tsc --ignoreConfig --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler --allowImportingTsExtensions supabase/functions/generate-tree/index.ts supabase/functions/delete-account/index.ts",
     "export:web": "expo export --platform web",
     "db:check": "node --env-file=.env scripts/check-supabase.mjs",
     "lint": "expo lint",

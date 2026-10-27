@@ -1,4 +1,4 @@
-import { BLOCKER_MAP, PILLARS, labelForIdentity } from "./pillars";
+import { PILLARS } from "./pillars";
 import {
   assessGoalSafety,
   clampDurationToBudget,
@@ -9,6 +9,7 @@ import { getSupabase } from "./supabase";
 import { validatePracticeText } from "./safety-rules";
 import { detectTheme } from "./plans";
 import { fallbackReason, type FallbackReason } from "./engine/fallback";
+import { startingPointFor } from "./engine/stage";
 import type {
   BlockerId,
   GeneratedEasy,
@@ -110,6 +111,175 @@ interface ThemeBranchTemplate {
     description: string;
     steps: [string, string];
   }[];
+}
+
+/**
+ * The four stages of making something, for the on-device library.
+ *
+ * The model writes its own arc from the person's goal. This is the honest
+ * version when it cannot be reached: find out, make the smallest real thing,
+ * put it in front of someone, respond. Four different acts on purpose, because
+ * "work on it" four weeks in a row is not a plan.
+ */
+function craftStages(theme: GoalTheme, goal: string): ThemeBranchTemplate["nodes"] {
+  if (theme === "coding") {
+    return [
+      {
+        title: "Draw the One Screen It Opens To",
+        minutes: 2,
+        description: `Every app starts as one screen someone opens to do one thing, and "${goal}" needs that screen named before anything is built.`,
+        steps: [
+          "Sketch that screen on paper and list the three things on it.",
+          "Write the single sentence under the title that says what it does.",
+        ],
+      },
+      {
+        title: "Make That One Screen Work End to End",
+        minutes: 10,
+        description: "One screen that loads real data and saves it is a working app; three unfinished screens are not.",
+        steps: [
+          "Show one real saved item on that screen, unstyled is fine.",
+          "Make adding that item save, and survive a reload.",
+        ],
+      },
+      {
+        title: "Put It in Front of Three People",
+        minutes: 10,
+        description: "Their stuck point becomes the next thing you build; without them it is a guess.",
+        steps: [
+          "Send the build or a 60-second recording to three people with the problem.",
+          "Ask each to do the one core action, and note where they stop.",
+        ],
+      },
+      {
+        title: "Fix the Step They Got Stuck On",
+        minutes: 15,
+        description: "Fixing the first place two of three testers stopped beats any new feature you could add.",
+        steps: [
+          "Change that step so it needs no explanation.",
+          "Send build 2 to the same three people and ask whether it worked.",
+        ],
+      },
+    ];
+  }
+  if (theme === "reading" || theme === "language") {
+    return [
+      {
+        title: "Find the Sentence That Does Not Make Sense",
+        minutes: 2,
+        description: "Reading on past the unclear sentence wastes the rest of the session.",
+        steps: [
+          "Open the chapter you have been avoiding and find the first sentence you cannot explain.",
+          "Write it in your own words, badly, with the book closed.",
+        ],
+      },
+      {
+        title: "Read Only That Section, Pen Down",
+        minutes: 10,
+        description: "One section understood beats ten pages skimmed.",
+        steps: [
+          "Read that section once without taking notes.",
+          "Close the book and write what it said from memory.",
+        ],
+      },
+      {
+        title: "Say It Out Loud to One Person",
+        minutes: 10,
+        description: "Explaining it exposes the part you only half know.",
+        steps: [
+          "Explain the idea in three sentences, with no notes.",
+          "Ask them to repeat it back; their version shows the gap.",
+        ],
+      },
+      {
+        title: "Use It in a Real Sentence or Problem",
+        minutes: 15,
+        description: "Knowledge you have used once is knowledge you keep.",
+        steps: [
+          "Use the new structure in your own writing, or in one practice problem.",
+          "Mark where you still hesitated and take that back to the book.",
+        ],
+      },
+    ];
+  }
+  if (theme === "speaking") {
+    return [
+      {
+        title: "Record 60 Seconds on the Real Topic",
+        minutes: 2,
+        description: "You cannot improve a talk you have never heard yourself give.",
+        steps: [
+          "Record one minute on the thing you actually have to say.",
+          "Listen once and note the first sentence that lost you.",
+        ],
+      },
+      {
+        title: "Rebuild the Opening Line",
+        minutes: 10,
+        description: "The first ten words decide whether the rest is heard.",
+        steps: [
+          "Write the opening so it makes one claim, in ten words.",
+          "Record it three times and keep the clearest take.",
+        ],
+      },
+      {
+        title: "Say It to One Person",
+        minutes: 10,
+        description: "A face tells you more than a recording does.",
+        steps: [
+          "Give the opening to one person and watch their face, not your notes.",
+          "Ask what they think you are claiming.",
+        ],
+      },
+      {
+        title: "Deliver the Whole Thing Once",
+        minutes: 15,
+        description: "Finishing once, badly, is what makes the second time possible.",
+        steps: [
+          "Deliver it end to end without stopping, even when a line goes wrong.",
+          "Note the two places you rushed, and fix only those.",
+        ],
+      },
+    ];
+  }
+  return [
+    {
+      title: "Write the One Sentence It Argues",
+      minutes: 2,
+      description: `If the claim of "${goal}" cannot fit in one sentence, the draft will wander.`,
+      steps: [
+        "Write the single claim of the piece in one sentence.",
+        "List the three things a reader would need to believe it.",
+      ],
+    },
+    {
+      title: "Draft Three Hundred Bad Words",
+      minutes: 10,
+      description: "Three hundred finished words beat a perfect page you never wrote.",
+      steps: [
+        "Write 300 words on the first point without editing.",
+        "Stop at 300 even if it is going well.",
+      ],
+    },
+    {
+      title: "Read It to One Person",
+      minutes: 10,
+      description: "The confused face is the edit list, and it costs nothing.",
+      steps: [
+        "Read the draft aloud to one person without explaining it first.",
+        "Write down the first place they looked confused.",
+      ],
+    },
+    {
+      title: "Cut What They Skipped",
+      minutes: 15,
+      description: "Cutting the weak part is the work, not a failure of it.",
+      steps: [
+        "Cut or rewrite the part they stumbled on, and nothing else.",
+        "Read the piece end to end once, then stop.",
+      ],
+    },
+  ];
 }
 
 function templatesForTheme(
@@ -552,63 +722,16 @@ function templatesForTheme(
     craft: {
       focus:
         theme === "coding"
-          ? "Daily Shipping & Code"
+          ? "The Build Itself"
           : theme === "reading" || theme === "language"
             ? "Deliberate Study & Recall"
             : theme === "speaking"
               ? "Voice & Brave Reps"
               : "Daily Making & Output",
-      nodes: [
-        {
-          title:
-            theme === "coding"
-              ? "Open the Editor & Write 5 Lines"
-              : theme === "reading" || theme === "language"
-                ? "Read Two Pages With a Pen"
-                : theme === "speaking"
-                  ? "Two-Minute Out-Loud Rep"
-                  : "Three-Sentence Ugly Draft",
-          minutes: 2,
-          description: `The 2-minute Seed version of "${shortGoal}" — small enough to never skip.`,
-          steps: [
-            theme === "coding"
-              ? "Open your project file and write or refactor one tiny block."
-              : theme === "reading" || theme === "language"
-                ? "Open your book or lesson and complete 2 focused pages or 5 flashcards."
-                : theme === "speaking"
-                  ? "Speak one clear thought out loud for 90 seconds without stopping."
-                  : "Open a blank note and write 3 raw sentences or sketch for 2 minutes.",
-            "Save your progress immediately — the seed is planted.",
-          ],
-        },
-        {
-          title: "Ten-Minute Core Practice Block",
-          minutes: 10,
-          description: `One unhurried block directly advancing "${shortGoal}".`,
-          steps: [
-            `Pick one concrete micro-piece of "${shortGoal}" you can finish in 10 minutes.`,
-            "Work straight through the timer without judging the quality.",
-          ],
-        },
-        {
-          title: "Twenty-Minute Deep Craft Session",
-          minutes: 20,
-          description: `Move "${shortGoal}" from rough start to a tangible artifact.`,
-          steps: [
-            "Build, write, or practice the hardest part first while your focus is fresh.",
-            "Leave a 1-line note at the end marking where to pick up next time.",
-          ],
-        },
-        {
-          title: "Ship & Archive the Proof",
-          minutes: 20,
-          description: `Finish one complete unit of "${shortGoal}" you can point to with pride.`,
-          steps: [
-            "Polish only what matters and call the piece done.",
-            "Save or publish it into your 30-day proof folder.",
-          ],
-        },
-      ],
+      // Four stages, not four repeats of one act: find out, make the smallest
+      // real thing, put it in front of someone, respond. Without the arc a local
+      // plan is "work on it" four times, which is what made it useless.
+      nodes: craftStages(theme, shortGoal),
     },
     connection: {
       focus: "Environment & Honest Sharing",
@@ -666,13 +789,10 @@ export function buildSeedPlan(answers: OnboardingAnswers): GeneratedTree {
 
   const theme = detectGoalTheme(safeGoal, answers.identity);
   const templates = templatesForTheme(theme, safeGoal);
-  const blockerMeta = BLOCKER_MAP[answers.blocker] ?? BLOCKER_MAP.consistency;
   const antiBlockerInstruction = blockerStep(answers.blocker);
 
   return {
-    summary: `Built for a ${labelForIdentity(
-      answers.identity,
-    )} working toward "${safeGoal}" (${answers.timeBudget} min/day), with built-in guardrails for ${blockerMeta.label.toLowerCase()}.`,
+    summary: `Your next 30 days: ${safeGoal}. One ${answers.timeBudget}-minute practice a day, plus three lighter ones across the week, and a smaller version for the days it does not fit.`,
     safetyNote:
       safety.coachingNote ??
       "Safety & pacing active: start with 2-minute seeds, stay inside your time budget, and rest when needed.",
@@ -827,6 +947,8 @@ export async function generateTree(
           // person's own habits when they asked to build something.
           focus: detectTheme(answers.goal).label,
           branch: detectTheme(answers.goal).primary.branch,
+          // Whether anything already exists changes what week 1 must be.
+          startingPoint: startingPointFor(answers.goal),
         },
       });
 
