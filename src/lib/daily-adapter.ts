@@ -1,18 +1,22 @@
-import type { DailyPlan, DailySnapshot, PracticeDraft } from "./daily-types";
-import type { GeneratedNode, GeneratedTree, OnboardingAnswers, PillarId, Profile, TreeNode } from "./types";
+import type { DailyPlan, DailySnapshot, PracticeDraft, Rung } from "./daily-types";
+import type { GeneratedEasy, GeneratedNode, GeneratedTree, OnboardingAnswers, PillarId, Profile, TreeNode } from "./types";
 import { PILLARS } from "./pillars";
 import { PROGRESSION } from "./progression";
 import { buildPlan, detectTheme, validatePlan, MAX_VARIANT_STEPS, type Budget } from "./plans";
+import { rungFor } from "./engine/week";
 import type { TreeSource } from "./gemini";
 
 /**
- * The plan is built from the tree's own words.
+ * The plan is built from the tree's own words, all of them.
  *
- * A generated tree carries one seed node per branch, written for this person's
- * goal. Those nodes become the four practices, so the steps on the Today screen
- * are the ones the model wrote for this goal rather than a shared template. The
- * curated library is still the safety net: it supplies any branch the tree did
- * not cover, and the whole plan if the result would not survive the server's
+ * A generated tree carries four nodes per branch, written for this person's
+ * goal. The first node becomes week one of that branch's practice and the other
+ * three become weeks two to four, so the practice deepens along the model's own
+ * ramp instead of repeating its opening step for a month. The model's two-minute
+ * version is taken with it.
+ *
+ * The curated library is still the safety net: it supplies any branch the tree
+ * did not cover, and the whole plan if the result would not survive the server's
  * validation.
  */
 
@@ -28,33 +32,55 @@ function nodeMinutes(duration: string, budget: Budget) {
   return Math.min(found, budget);
 }
 
-function practiceFromNode(
-  node: GeneratedNode,
-  branch: PillarId,
-  role: PracticeDraft["role"],
-  budget: Budget,
-): PracticeDraft | null {
+function rungFromNode(node: GeneratedNode, budget: Budget): Rung | null {
   const title = node.title.trim().slice(0, 80);
-  const why = node.description.trim().slice(0, 280);
   const steps = node.instructions
     .map((step) => step.trim())
     .filter(Boolean)
     .slice(0, MAX_VARIANT_STEPS);
-  if (!title || !why || steps.length === 0) return null;
+  if (!title || steps.length === 0) return null;
+  return { title, minutes: nodeMinutes(node.duration, budget), steps };
+}
+
+function easyFromTree(easy: GeneratedEasy | undefined, firstStep: string): Rung {
+  const steps = (easy?.steps ?? [])
+    .map((step) => step.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  const title = easy?.title?.trim().slice(0, 80);
+  if (title && steps.length > 0) return { title, minutes: 2, steps };
+  return {
+    title: "The two-minute version",
+    minutes: 2,
+    steps: [firstStep, "Stop there — a day that small is a complete day."],
+  };
+}
+
+function practiceFromNodes(
+  nodes: GeneratedNode[],
+  branch: PillarId,
+  role: PracticeDraft["role"],
+  budget: Budget,
+  easy: GeneratedEasy | undefined,
+): PracticeDraft | null {
+  const week1 = nodes[0] ? rungFromNode(nodes[0], budget) : null;
+  const why = nodes[0]?.description.trim().slice(0, 280) ?? "";
+  if (!week1 || !why) return null;
+  // Weeks two to four are the model's own next steps for the same practice.
+  const ladder = nodes
+    .slice(1, 4)
+    .map((node) => rungFromNode(node, budget))
+    .filter((rung): rung is Rung => Boolean(rung));
 
   return {
     branch,
-    title,
+    title: week1.title,
     why,
     role,
     cadence: role === "primary" ? "daily" : "weekly",
     cadence_n: 1,
-    full_variant: { title, minutes: nodeMinutes(node.duration, budget), steps },
-    easy_variant: {
-      title: "The two-minute version",
-      minutes: 2,
-      steps: [steps[0], "Stop there — a day that small is a complete day."],
-    },
+    full_variant: ladder.length ? { ...week1, ladder } : week1,
+    easy_variant: easyFromTree(easy, week1.steps[0]),
   };
 }
 
@@ -86,8 +112,10 @@ export function dailyPlanFromTree(
 
   const practices = PILLARS.map((pillar) => {
     const role: PracticeDraft["role"] = pillar.id === mainBranch ? "primary" : "supporting";
-    const node = tree.pillars.find((entry) => entry.pillar === pillar.id)?.nodes?.[0];
-    const built = node ? practiceFromNode(node, pillar.id, role, budget) : null;
+    const entry = tree.pillars.find((item) => item.pillar === pillar.id);
+    const built = entry?.nodes?.length
+      ? practiceFromNodes(entry.nodes, pillar.id, role, budget, entry.easy)
+      : null;
     return built ?? base.practices.find((practice) => practice.branch === pillar.id);
   }).filter((practice): practice is PracticeDraft => Boolean(practice));
 
@@ -115,14 +143,17 @@ export function presentation(snapshot: DailySnapshot): { profile: Profile | null
       const practice = practices.find((p) => p.id === m.practice_id);
       const unlocked = progress.unlocked_milestones.includes(m.id);
       const branchLabel = (season.branch_labels as Record<PillarId, string> | null)?.[m.branch];
+      // Each tier shows that week's real step, so the tree grows deeper rather
+      // than repeating the same opening node four times.
+      const rung = rungFor(practice?.full_variant, m.tier);
       return {
         id: practice?.id ?? m.practice_id,
         pillar: m.branch,
         tier: m.tier - 1,
-        title: practice?.title ?? m.title,
-        duration: `${practice?.full_variant.minutes ?? 2} min`,
+        title: rung.title || practice?.title || m.title,
+        duration: `${rung.minutes} min`,
         description: practice?.why ?? "",
-        instructions: practice?.full_variant.steps ?? [],
+        instructions: rung.steps,
         status: unlocked ? "completed" : "active",
         completedAt: unlocked ? m.unlocked_at : null,
         branchLabel,

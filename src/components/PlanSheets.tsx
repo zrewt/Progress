@@ -3,8 +3,11 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowRight, X } from "lucide-react-native";
 import { useGame, planVersionOf } from "../lib/game-context";
-import { planFromSeason } from "../lib/daily-adapter";
-import { buildPlan, detectTheme, BUDGETS, type Budget } from "../lib/plans";
+import { dailyPlanFromTree, planFromSeason } from "../lib/daily-adapter";
+import { generateTree } from "../lib/gemini";
+import { planHistory } from "../lib/engine/history";
+import { detectTheme, BUDGETS, type Budget } from "../lib/plans";
+import type { OnboardingAnswers } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { PrimaryButton, QuietButton } from "./Controls";
 import { Body, Display, Label, Micro } from "./Type";
@@ -54,7 +57,7 @@ function SheetFrame({ title, onClose, children }: { title: string; onClose: () =
 }
 
 export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { today, snapshot, editPlan, authBusy } = useGame();
+  const { today, snapshot, editPlan, authBusy, aiAllowed } = useGame();
   const plan = today && snapshot ? planFromSeason(snapshot, today.season.id) : null;
   const [goal, setGoal] = useState(plan?.goal ?? "");
   const [budget, setBudget] = useState<Budget>((plan?.minutes_budget ?? 15) as Budget);
@@ -64,37 +67,25 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
   const valid = goal.trim().length >= 3 && goal.trim().length <= 140;
 
   async function save() {
+    if (!plan) return;
     setBusy(true);
-    const sameGoal = goal.trim() === plan!.goal.trim();
-    // A new goal needs a new plan. Keeping the same goal (a typo, or just a
-    // different daily size) must not replace practices written for this person
-    // with the shared library ones.
-    const next = sameGoal
-      ? {
-          ...plan!,
-          goal: goal.trim(),
-          minutes_budget: budget,
-          plan_version: plan!.plan_version + 1,
-          practices: plan!.practices.map((practice) => ({
-            ...practice,
-            full_variant: {
-              ...practice.full_variant,
-              minutes: Math.min(practice.full_variant.minutes, budget),
-            },
-          })),
-        }
-      : buildPlan({
-          goal,
-          identity: plan!.identity,
-          blocker: plan!.blocker,
-          minutes_budget: budget,
-          plan_source: plan!.plan_source,
-          plan_version: plan!.plan_version + 1,
-          theme,
-        });
-    const saved = await editPlan(next);
-    setBusy(false);
-    if (saved) onClose();
+    try {
+      // A new version goes back through the engine rather than the shared
+      // templates: the steps have to be rewritten for the new goal and the new
+      // daily size, and the season so far is the best briefing it can get.
+      const answers: OnboardingAnswers = {
+        identity: plan.identity,
+        goal,
+        blocker: plan.blocker,
+        timeBudget: String(budget),
+      };
+      const built = await generateTree(answers, { allowAi: aiAllowed, history: planHistory(snapshot) });
+      const next = dailyPlanFromTree(answers, built.tree, built.source);
+      const saved = await editPlan({ ...next, plan_version: plan.plan_version + 1 });
+      if (saved) onClose();
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

@@ -37,6 +37,7 @@ import {
   goalsForIdentity,
 } from "../lib/pillars";
 import { assessGoalSafety } from "../lib/safety";
+import { planHistory } from "../lib/engine/history";
 import type { BlockerId, IdentityId, OnboardingAnswers } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { BotanicalBranch } from "./BotanicalBranch";
@@ -311,7 +312,7 @@ function GeneratingOverlay({
 }
 
 export function Onboarding() {
-  const { user, submitOnboarding, authBusy, signOut, error, aiAllowed, recordConsent } = useGame();
+  const { user, submitOnboarding, authBusy, signOut, error, aiAllowed, recordConsent, snapshot } = useGame();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Partial<OnboardingAnswers>>({
@@ -406,7 +407,10 @@ export function Onboarding() {
     setGenerating(true);
     setMessageIndex(0);
     try {
-      const built = await generateTree(fullAnswers(overrideBudget), { allowAi: useAi });
+      const built = await generateTree(fullAnswers(overrideBudget), {
+        allowAi: useAi,
+        history: planHistory(snapshot),
+      });
       setPreview(built);
       setStep(3);
     } finally {

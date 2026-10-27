@@ -7,6 +7,7 @@ import { getSupabase, isSupabaseConfigured } from "./supabase";
 import { AccountScope, DailyData } from "./daily-data";
 import { dailyPlanFromTree, presentation, DAILY_XP } from "./daily-adapter";
 import { todayState, type TodayView } from "./today";
+import { planHistory } from "./engine/history";
 import { AI_CONSENT_VERSION, RESET_REDIRECT } from "./config";
 import { parseRecoveryLink } from "./auth-links";
 import { deviceQueue } from "./offline-store";
@@ -218,7 +219,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }
   async function submitOnboarding(answers: OnboardingAnswers, built?: { tree: GeneratedTree; source: TreeSource }) {
     const token = scope.token();
-    const result = built ?? await generateTree(answers);
+    // A finished season is the best briefing the generator can get.
+    const result = built ?? await generateTree(answers, { history: planHistory(snapshot) });
     if (!scope.isCurrent(token)) return;
     await startSeason(dailyPlanFromTree(answers, result.tree, result.source));
   }

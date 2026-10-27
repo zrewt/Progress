@@ -1,5 +1,6 @@
 import type { CompletionEvent, DailySnapshot, Practice, Season } from "./daily-types";
 import { addDays, daysBetween, isCounted, localDate } from "./progression";
+import { planWeek } from "./engine/week";
 import { nextReviewWeek } from "./review";
 
 export interface TodayView {
@@ -14,6 +15,8 @@ export interface TodayView {
   streak: number;
   bestStreak: number;
   dayNumber: number;
+  /** Week of the four-week ladder this date belongs to. */
+  week: number;
   missedDays: number;
   welcomeBack: boolean;
   easierByDefault: boolean;
@@ -88,6 +91,7 @@ export function todayState(snapshot: DailySnapshot, now: Date = new Date()): Tod
     streak: snapshot.progress?.current_streak ?? 0,
     bestStreak: snapshot.progress?.best_streak ?? 0,
     dayNumber: Math.max(1, Math.min(30, daysBetween(season.started_on, today) + 1)),
+    week: planWeek(season.started_on, today),
     missedDays,
     welcomeBack: missedDays >= 2 && !countedToday,
     easierByDefault: season.week_mode === "lighter" && (!season.week_mode_until || today <= season.week_mode_until),

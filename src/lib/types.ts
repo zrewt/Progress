@@ -79,14 +79,32 @@ export interface GeneratedNode {
   instructions: string[];
 }
 
+export interface GeneratedEasy {
+  title: string;
+  steps: string[];
+}
+
 export interface GeneratedTree {
   summary: string;
   safetyNote: string;
   pillars: {
     pillar: PillarId;
     focus?: string;
+    /** The model's own two-minute version of the branch's week-one practice. */
+    easy?: GeneratedEasy;
     nodes: GeneratedNode[];
   }[];
+}
+
+/** What the last season actually looked like, sent so the next plan can adapt. */
+export interface PlanHistory {
+  seasons: number;
+  days_practised: number;
+  days_planned: number;
+  kept: string[];
+  dropped: string[];
+  average_effort: number | null;
+  last_review: string | null;
 }
 
 export interface Celebration {

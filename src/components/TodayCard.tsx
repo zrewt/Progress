@@ -4,6 +4,7 @@ import type { Practice } from "../lib/daily-types";
 import { useGame } from "../lib/game-context";
 import { PILLAR_MAP } from "../lib/pillars";
 import { isSupportingDue } from "../lib/today";
+import { ladderWeeks, rungFor } from "../lib/engine/week";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { PillarIcon } from "./PillarIcon";
 import { PrimaryButton } from "./Controls";
@@ -13,8 +14,12 @@ export function TodayCard({ onBegin }: { onBegin: (practice: Practice) => void }
   const { today, snapshot } = useGame();
   if (!today) return null;
 
-  const { primary, season, countedToday, easierByDefault, supporting } = today;
+  const { primary, season, countedToday, easierByDefault, supporting, week } = today;
   const pillar = PILLAR_MAP[primary.branch];
+  // The same practice, a step further each week: the plan deepens instead of
+  // asking for the identical first action every day.
+  const rung = rungFor(primary.full_variant, week);
+  const weeks = ladderWeeks(primary.full_variant);
   const countedEvent = today.todayEvents.find((event) => event.kind === "full" || event.kind === "easy");
   const doneEasily = countedEvent?.kind === "easy";
   const seasonEvents = (snapshot?.events ?? []).filter((event) => !event.undone_at && event.season_id === season.id);
@@ -54,13 +59,13 @@ export function TodayCard({ onBegin }: { onBegin: (practice: Practice) => void }
         </>
       ) : (
         <>
-          <Display style={styles.title}>{primary.title}</Display>
+          <Display style={styles.title}>{rung.title}</Display>
           <Body style={styles.body}>{primary.why}</Body>
 
           <View style={styles.metaRow}>
             <View style={styles.metaItem}>
               <Clock size={11} strokeWidth={1.6} color={colors.sageDim} />
-              <Text style={styles.metaText}>{primary.full_variant.minutes} min</Text>
+              <Text style={styles.metaText}>{rung.minutes} min</Text>
             </View>
             <Text style={styles.metaDivider}>·</Text>
             <View style={styles.metaItem}>
@@ -83,6 +88,11 @@ export function TodayCard({ onBegin }: { onBegin: (practice: Practice) => void }
               ? "Your review asked for a lighter week, so the easier version is offered first."
               : "Two minutes is a real practice. Choose the easier version any day."}
           </Micro>
+          {weeks > 1 ? (
+            <Micro style={styles.weekNote}>
+              Week {week} of {weeks} — this is the same practice, one step further than last week.
+            </Micro>
+          ) : null}
         </>
       )}
 
@@ -132,6 +142,7 @@ const styles = StyleSheet.create({
   metaDivider: { fontFamily: fonts.mono, fontSize: 9.5, color: colors.sageDeep },
   actions: { marginTop: 18 },
   hint: { marginTop: 10, textTransform: "none", letterSpacing: 0.3, lineHeight: 15 },
+  weekNote: { marginTop: 6, textTransform: "none", letterSpacing: 0.3, lineHeight: 15, color: colors.copperLight },
   againRow: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 },
   againText: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.sage },
   supporting: { marginTop: 20, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hairline, gap: 4 },

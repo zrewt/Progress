@@ -1,6 +1,13 @@
 import type { BlockerId, IdentityId, PillarId } from "./types";
 
-export interface Variant { title: string; minutes: number; steps: string[] }
+/** One week of a practice. Week 1 is the variant itself; later weeks are its ladder. */
+export interface Rung { title: string; minutes: number; steps: string[] }
+/**
+ * `ladder` holds the following weeks of the same practice, so a plan deepens
+ * instead of repeating its first step for 30 days. It lives inside the variant
+ * jsonb, which is why no migration is needed and older plans still read fine.
+ */
+export interface Variant extends Rung { ladder?: Rung[] }
 export interface PracticeDraft {
   branch: PillarId;
   title: string;

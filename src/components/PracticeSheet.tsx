@@ -6,6 +6,7 @@ import type { Practice } from "../lib/daily-types";
 import { useGame } from "../lib/game-context";
 import { PILLAR_MAP } from "../lib/pillars";
 import { SKIP_REASONS, EFFORT_LABELS } from "../lib/today";
+import { ladderWeeks, rungFor } from "../lib/engine/week";
 import { alternativesFor, practiceDraft, type Budget } from "../lib/plans";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { PillarIcon } from "./PillarIcon";
@@ -49,7 +50,10 @@ export function PracticeSheet({
 
   if (!practice) return null;
 
-  const variant = easy ? practice.easy_variant : practice.full_variant;
+  // The practice keeps its identity; the week decides how far it goes today.
+  const week = today?.week ?? 1;
+  const weeks = ladderWeeks(practice.full_variant);
+  const variant = easy ? practice.easy_variant : rungFor(practice.full_variant, week);
   const pillar = PILLAR_MAP[practice.branch];
   const budget = (today?.season.minutes_budget ?? 15) as Budget;
   const inUse = (snapshot?.practices ?? [])
@@ -123,6 +127,12 @@ export function PracticeSheet({
               <Text style={styles.metaText}>{variant.minutes} min</Text>
               <Text style={styles.metaDivider}>·</Text>
               <Text style={styles.metaText}>{easy ? "Easier version" : "Full version"}</Text>
+              {!easy && weeks > 1 ? (
+                <>
+                  <Text style={styles.metaDivider}>·</Text>
+                  <Text style={styles.metaText}>Week {week} of {weeks}</Text>
+                </>
+              ) : null}
             </View>
 
             <Pressable

@@ -6,13 +6,16 @@ import {
   scrubGoalForPrivacy,
 } from "./safety";
 import { getSupabase } from "./supabase";
+import { validatePracticeText } from "./safety-rules";
 import type {
   BlockerId,
+  GeneratedEasy,
   GeneratedNode,
   GeneratedTree,
   IdentityId,
   OnboardingAnswers,
   PillarId,
+  PlanHistory,
 } from "./types";
 
 export type TreeSource = "edge-ai" | "seed-engine";
@@ -687,6 +690,22 @@ function asString(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
+/** The model's own two-minute version, accepted only if it stays short and safe. */
+function asEasy(value: unknown): GeneratedEasy | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const title = typeof record.title === "string" ? record.title.trim().slice(0, 80) : "";
+  const steps = Array.isArray(record.steps)
+    ? record.steps
+        .filter((step): step is string => typeof step === "string" && step.trim().length > 0)
+        .map((step) => step.trim().slice(0, 180))
+        .slice(0, 3)
+    : [];
+  if (!title || steps.length === 0) return undefined;
+  if (!validatePracticeText(`${title} ${steps.join(" ")}`).ok) return undefined;
+  return { title, steps };
+}
+
 function asInstructions(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return fallback;
   const steps = value
@@ -755,6 +774,7 @@ export function normalizeTree(
           0,
           48,
         ),
+        easy: asEasy(entry?.easy),
         nodes,
       };
     }),
@@ -771,7 +791,7 @@ export function normalizeTree(
  */
 export async function generateTree(
   answers: OnboardingAnswers,
-  options: { allowAi?: boolean } = {},
+  options: { allowAi?: boolean; history?: PlanHistory | null } = {},
 ): Promise<TreeResult> {
   const safety = assessGoalSafety(answers.goal);
   if (!safety.safe) {
@@ -790,6 +810,7 @@ export async function generateTree(
           goal: scrubGoalForPrivacy(answers.goal.trim()),
           blocker: answers.blocker,
           timeBudget: answers.timeBudget,
+          history: options.history ?? null,
         },
       });
 
