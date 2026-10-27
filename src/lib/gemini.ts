@@ -8,6 +8,7 @@ import {
 import { getSupabase } from "./supabase";
 import { validatePracticeText } from "./safety-rules";
 import { detectTheme } from "./plans";
+import { fallbackReason, type FallbackReason } from "./engine/fallback";
 import type {
   BlockerId,
   GeneratedEasy,
@@ -19,11 +20,15 @@ import type {
   PlanHistory,
 } from "./types";
 
+export { fallbackReason };
+export type { FallbackReason };
+
 export type TreeSource = "edge-ai" | "seed-engine";
 
 export interface TreeResult {
   tree: GeneratedTree;
   source: TreeSource;
+  reason?: FallbackReason;
 }
 
 type GoalTheme =
@@ -807,7 +812,9 @@ export async function generateTree(
   }
 
   const sb = getSupabase();
+  let reason: FallbackReason = "off";
   if (sb && options.allowAi !== false) {
+    reason = "unavailable";
     try {
       const { data, error } = await sb.functions.invoke("generate-tree", {
         body: {
@@ -829,11 +836,13 @@ export async function generateTree(
           source: "edge-ai",
         };
       }
-    } catch {
+      reason = fallbackReason(error, true);
+    } catch (caught) {
       // Edge function not deployed or unreachable — fall through to Starting Seed Engine.
+      reason = fallbackReason(caught, true);
     }
   }
 
   await new Promise((resolve) => setTimeout(resolve, 450));
-  return { tree: buildSeedPlan(answers), source: "seed-engine" };
+  return { tree: buildSeedPlan(answers), source: "seed-engine", reason };
 }

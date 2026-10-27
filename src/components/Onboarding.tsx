@@ -27,7 +27,7 @@ import {
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGame } from "../lib/game-context";
-import { generateTree, type TreeResult } from "../lib/gemini";
+import { generateTree, type FallbackReason, type TreeResult } from "../lib/gemini";
 import { dailyPlanFromTree } from "../lib/daily-adapter";
 import {
   BLOCKERS,
@@ -310,6 +310,13 @@ function GeneratingOverlay({
     </View>
   );
 }
+
+const FALLBACK_COPY: Record<FallbackReason, string> = {
+  off: "AI suggestions are off, so this plan comes from the app's own library rather than the model.",
+  limit: "Today's AI drafts are used up, so this plan comes from the app's own library.",
+  rejected: "The AI draft did not pass the safety and shape checks, so this plan comes from the app's own library.",
+  unavailable: "The AI could not be reached, so this plan comes from the app's own library.",
+};
 
 export function Onboarding() {
   const { user, submitOnboarding, authBusy, signOut, error, aiAllowed, recordConsent, snapshot } = useGame();
@@ -629,7 +636,7 @@ export function Onboarding() {
                   </Micro>
                   <Micro style={{ color: colors.lichen }}>4 practices</Micro>
                 </View>
-                <Text style={styles.previewSummaryText}>{previewPlan.plan_summary}</Text>
+                <Text style={styles.previewSummaryText}>{previewPlan.plan_summary}</Text>{preview.source === "seed-engine" ? <Micro style={{ marginTop: 8, textTransform: "none", letterSpacing: 0.3, color: colors.sage }}>{FALLBACK_COPY[preview.reason ?? "unavailable"]}</Micro> : null}
                 <View style={styles.previewSafetyRow}>
                   <ShieldCheck
                     size={13}
@@ -668,7 +675,7 @@ export function Onboarding() {
                 );
               })}
 
-              {answers.timeBudget !== "5" ? (
+              {preview.source === "seed-engine" && aiAllowed ? (<Pressable onPress={() => void buildPreview(true)} disabled={generating} accessibilityRole="button" accessibilityLabel="Ask the AI to draft the plan again" style={styles.gentlerBtn}><Text style={styles.gentlerBtnText}>Ask the AI to draft this again</Text></Pressable>) : null}{answers.timeBudget !== "5" ? (
                 <Pressable
                   onPress={() => void handleMakeGentler()}
                   accessibilityRole="button"

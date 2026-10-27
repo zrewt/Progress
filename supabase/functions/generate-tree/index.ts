@@ -122,6 +122,7 @@ const GENERIC_FILLER: [RegExp, string][] = [
   [/\breset your (shoulders|body|mind)\b/i, "reset your shoulders"],
   [/\bcheck in with yourself\b/i, "check in with yourself"],
   [/\breflect on your (progress|day|journey)\b/i, "reflect on your progress"],
+  [/\bopen (the|your) (code )?editor\b/i, "open the editor"],
 ];
 
 function genericFiller(text: string): string | null {
@@ -145,6 +146,24 @@ function historyBlock(history: History | null) {
     "- Keep what stuck, and replace or shrink anything that never happened. Do not offer the same practice again unchanged.",
   );
   return `${lines.join("\n")}\n`;
+}
+
+/**
+ * A building goal is not "do some work on it". The four branches have to carry
+ * the whole job — understanding the problem, making the smallest usable thing,
+ * putting it in front of someone, and getting it out — or the plan is advice
+ * about being productive instead of a plan for the product.
+ */
+function buildingBlock(branch: string) {
+  if (branch !== "craft") return "";
+  return `
+HOW A BUILDING PLAN SPENDS ITS FOUR BRANCHES
+- craft: the actual build. Name the screen, form, endpoint, data model, import, bug that blocks the demo, or the deploy. Not "the editor".
+- mind: research and decisions. Three people who have the problem and what they do today, the two alternatives they already use, the docs for the tool you do not understand, the list of what to cut.
+- connection: the people it is for. One tester, one feedback conversation, one post, one launch message, one person asked to try it.
+- body: the routine that makes a thirty-day build survivable. Walk to think, stand between sessions, stop before the point where tomorrow is ruined.
+The four weeks tell one story: understand the problem, build the smallest usable version, put it in front of someone, then improve it or show it. Week 4 must point at something that exists by then, not a plan to make it later. A step is only useful if it would change what the person does today.
+`;
 }
 
 function buildPrompt(
@@ -174,7 +193,7 @@ body, mind, craft, connection, in that order. Four nodes each.
 - Node 2 is week 2: the same practice, one concrete step further. Node 3 is week 3. Node 4 is week 4.
 - Each node must be recognisably the same practice as the one before it, harder or more specific — never a different activity.
 - Make the ramp visible: the week-4 node should be something they could not have done in week 1.
-
+${buildingBlock(p.branch)}
 EACH BRANCH ALSO NEEDS A TWO-MINUTE VERSION
 "easy" is the smallest honest version of that branch's week-1 practice: one to three steps, no setup, no equipment, no decisions. It is its own action, not the full node cut in half.
 
@@ -318,11 +337,15 @@ Deno.serve(async (req: Request) => {
   // back to the local library.
   const FILLER_PREFIX = "generic filler: ";
   let correction = "";
+  // Tells the client whether to say "the draft was rejected" or "we could not
+  // reach the model", which are different problems for the person to act on.
+  let sawDraft = false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let tree: unknown = null;
     const attemptPrompt = correction ? `${prompt}\n\nCORRECTION FOR THIS ATTEMPT\n${correction}` : prompt;
     try { tree = await callModel(attemptPrompt, apiKey, model); } catch { tree = null; }
     if (tree) {
+      sawDraft = true;
       const problem = validateTree(tree, budget);
       if (!problem) return respond(tree, 200);
       console.error("Rejected model output", { problem });
@@ -332,5 +355,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  return respond({ error: "The plan could not be drafted safely. A local plan is ready instead." }, 502);
+  return sawDraft
+    ? respond({ error: "The plan could not be drafted safely. A local plan is ready instead." }, 502)
+    : respond({ error: "Plan drafting is unavailable right now." }, 503);
 });
