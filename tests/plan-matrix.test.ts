@@ -47,6 +47,14 @@ const CASES: Case[] = [
   { goal: "spend less time on my phone", identity: "creator", blocker: "distraction", budget: 5, theme: "mindfulness" },
   { goal: "run my first 10k", identity: "scholar", blocker: "consistency", budget: 30, theme: "running" },
   { goal: "run a marathon while learning Spanish", identity: "athlete", blocker: "time", budget: 15, theme: "running" },
+  // The subject of the goal is the artefact, not the theme of its subject matter.
+  { goal: "make an app that helps people eat healthier", identity: "builder", blocker: "time", budget: 15, theme: "coding" },
+  { goal: "build a workout app", identity: "athlete", blocker: "consistency", budget: 5, theme: "coding" },
+  { goal: "write a book about running", identity: "creator", blocker: "perfectionism", budget: 30, theme: "writing" },
+  { goal: "start a podcast about sleep", identity: "creator", blocker: "overthinking", budget: 15, theme: "writing" },
+  // ...but a goal about their own habits stays their own habits.
+  { goal: "eat healthier every day", identity: "creator", blocker: "consistency", budget: 5, theme: "nutrition" },
+  { goal: "design a meal plan for my family", identity: "creator", blocker: "time", budget: 15, theme: "nutrition" },
 ];
 
 function treeFrom(plan: DailyPlan, weeks = 4): GeneratedTree {
@@ -147,6 +155,39 @@ for (const item of CASES) {
     assert.ok(primary.easy_variant.steps.length > 0);
   });
 }
+
+test("a goal about making something is planned around the making", () => {
+  assert.equal(detectTheme("make an app that helps people eat healthier").id, "coding");
+  assert.equal(detectTheme("build a workout app").id, "coding");
+  assert.equal(detectTheme("an app that helps people eat healthier").id, "coding");
+  assert.equal(detectTheme("write a book about running").id, "writing");
+  assert.equal(detectTheme("start a podcast about sleep").id, "writing");
+  assert.equal(detectTheme("help people eat healthier through an app").id, "coding");
+
+  // A goal about the person's own body or habits must not be read as making one.
+  assert.equal(detectTheme("eat healthier every day").id, "nutrition");
+  assert.equal(detectTheme("design a meal plan for my family").id, "nutrition");
+  assert.equal(detectTheme("read one book a month").id, "study");
+  assert.equal(detectTheme("run a marathon while learning Spanish").id, "running");
+  assert.equal(detectTheme("be more present with my kids").id, "connection");
+});
+
+test("an app-building goal never gets a plan about the builder's own cravings", () => {
+  const plan = buildPlan({
+    goal: "make an app that helps people eat healthier",
+    identity: "builder",
+    blocker: "time",
+    minutes_budget: 15,
+  });
+  const primary = plan.practices.find((practice) => practice.role === "primary");
+  assert.ok(primary);
+  assert.equal(primary.branch, "craft");
+  const text = everyText(plan).join(" ").toLowerCase();
+  for (const foodClue of ["craving", "countertop", "snack", "kitchen"]) {
+    assert.equal(text.includes(foodClue), false, `a building goal should not plan around ${foodClue}`);
+  }
+  assert.match(primary.full_variant.steps.join(" ").toLowerCase(), /build|app|screen|file|sentence/);
+});
 
 test("a plan history from a hard season changes what the prompt is told", () => {
   // The client-side summary is what the Edge Function clamps and prints; a

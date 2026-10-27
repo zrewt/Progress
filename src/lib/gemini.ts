@@ -7,6 +7,7 @@ import {
 } from "./safety";
 import { getSupabase } from "./supabase";
 import { validatePracticeText } from "./safety-rules";
+import { detectTheme } from "./plans";
 import type {
   BlockerId,
   GeneratedEasy,
@@ -815,6 +816,10 @@ export async function generateTree(
           blocker: answers.blocker,
           timeBudget: answers.timeBudget,
           history: options.history ?? null,
+          // What the goal is actually about, so the model does not plan the
+          // person's own habits when they asked to build something.
+          focus: detectTheme(answers.goal).label,
+          branch: detectTheme(answers.goal).primary.branch,
         },
       });
 

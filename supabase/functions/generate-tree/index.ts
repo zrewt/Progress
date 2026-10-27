@@ -22,6 +22,8 @@ interface RequestPayload {
   blocker?: string;
   timeBudget?: string;
   history?: unknown;
+  focus?: string;
+  branch?: string;
 }
 
 interface History {
@@ -145,7 +147,10 @@ function historyBlock(history: History | null) {
   return `${lines.join("\n")}\n`;
 }
 
-function buildPrompt(p: { identity: string; goal: string; blocker: string; timeBudget: string }, history: History | null) {
+function buildPrompt(
+  p: { identity: string; goal: string; blocker: string; timeBudget: string; focus: string; branch: string },
+  history: History | null,
+) {
   return `You are the plan writer for a 30-day habit app. You are writing one specific person's plan, not a plan for a category of person. Return JSON only.
 
 WHO THIS IS
@@ -153,11 +158,14 @@ WHO THIS IS
 - Their 30-day goal, in their words: "${p.goal}"
 - What gets in the way on a bad day: ${p.blocker}
 - Time available per day: ${p.timeBudget} minutes. Nothing you write may ask for longer.
+- This goal reads as: ${p.focus}
+- The daily practice must sit on the ${p.branch} branch${p.branch === "craft" ? " — they are making something they do not have yet, so the plan is about building it, not about their own health or habits" : ""}.
 ${historyBlock(history)}
 HOW TO WRITE A STEP — this is the whole job
 A step is a physical or on-screen action this person could take tomorrow with things they already have, described in words they would use.
 Every practice and every step must name the real thing: the actual screen, file, instrument, chapter, place or person.
 Never write anything that would fit any goal: "edit a file", "work on your project", "reset your shoulders", "take a breath", "check in with yourself", "reflect on your progress", "review your notes". If you catch yourself writing a placeholder, replace it with the specific act a good coach would name for this goal.
+When the goal is to make something — an app, a book, a course, a service for other people — the subject of the plan is that artefact. Do not convert it into the person's own diet, sleep or exercise routine just because the artefact mentions food, running or health. A person building an app that helps others eat better needs steps about scoping a screen, talking to three people who would use it, choosing what to cut, and shipping one small thing — not steps about their own cravings.
 If a branch does not obviously touch their goal, find the honest link and still name their real materials. For a mental, study or craft goal the Body practice must serve that goal — a walk while rehearsing the exact loop they have to write, ten minutes of posture work before a long session at their desk — never a generic stretch or breath. For a physical goal, Mind and Connection must still name their actual training, kit and people.
 
 FOUR BRANCHES, FOUR WEEKS — the shape is a ramp
@@ -269,6 +277,10 @@ Deno.serve(async (req: Request) => {
   const goal = scrubPii(String(body.goal ?? "").trim()).slice(0, 140);
   const blocker = String(body.blocker ?? "consistency").slice(0, 40);
   const timeBudget = ["5", "15", "30"].includes(String(body.timeBudget)) ? String(body.timeBudget) : "15";
+  const focus = scrubPii(String(body.focus ?? "")).slice(0, 48);
+  const branch = ["body", "mind", "craft", "connection"].includes(String(body.branch))
+    ? String(body.branch)
+    : "craft";
 
   const verdict = assessGoal(goal);
   if (verdict.kind === "decline") return respond({ error: verdict.message ?? "That goal cannot be supported." }, 400);
@@ -294,7 +306,10 @@ Deno.serve(async (req: Request) => {
   if (!apiKey) return respond({ error: "Plan drafting is unavailable right now." }, 503);
 
   const model = env("GEMINI_MODEL") || "gemini-2.5-flash";
-  const prompt = buildPrompt({ identity, goal, blocker, timeBudget }, readHistory(body.history));
+  const prompt = buildPrompt(
+    { identity, goal, blocker, timeBudget, focus: focus || "a personal practice", branch },
+    readHistory(body.history),
+  );
   const budget = Number(timeBudget);
 
   // One controlled retry. A rejected draft that failed on filler is retried with

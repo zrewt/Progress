@@ -78,7 +78,48 @@ export function scoreTheme(goal: string, theme: PlanTheme) {
   return hits(theme.strong) * 3 + hits(theme.weak);
 }
 
+/**
+ * Goals are not just nouns. "Make an app that helps people eat healthier" is a
+ * building goal whose object happens to mention food; scoring it on the food
+ * words produces a plan of food habits the person never asked for. When someone
+ * names an artefact and a making verb, the subject of the goal is the artefact.
+ */
+const CREATION_VERBS = [
+  "build", "make", "create", "design", "develop", "launch", "ship", "code", "write",
+  "publish", "start", "produce", "prototype", "record", "film", "draw", "craft", "program",
+];
+const DIGITAL_ARTEFACTS = [
+  "app", "application", "website", "site", "game", "tool", "platform", "product", "service",
+  "prototype", "dashboard", "tracker", "api", "software", "database",
+];
+const CREATIVE_ARTEFACTS = [
+  "book", "novel", "blog", "newsletter", "essay", "podcast", "script", "guide", "course",
+  "video", "channel", "zine", "comic", "song", "album", "portfolio",
+];
+const SERVES_OTHERS = [
+  "helps people", "help people", "helps others", "help others", "for people", "for others",
+  "for beginners", "for users", "other people", "for my community", "for kids",
+];
+
+/** The theme a goal is actually about, or null when the words alone decide it. */
+export function intendedTheme(goal: string): ThemeId | null {
+  const tokens = normalizeGoal(goal);
+  const has = (term: string) => tokens.includes(stem(term));
+  const phrase = (term: string) => {
+    const parts = normalizeGoal(term);
+    return parts.length > 0 && parts.every((part) => tokens.includes(part));
+  };
+  const digital = DIGITAL_ARTEFACTS.some(has);
+  const creative = CREATIVE_ARTEFACTS.some(has);
+  if (!digital && !creative) return null;
+  // An artefact only wins when they are making it or making it for someone else.
+  if (!CREATION_VERBS.some(has) && !SERVES_OTHERS.some(phrase)) return null;
+  return digital ? "coding" : "writing";
+}
+
 export function detectTheme(goal: string): PlanTheme {
+  const intended = intendedTheme(goal);
+  if (intended) return THEME_MAP[intended];
   const tokens = normalizeGoal(goal);
   let best = THEME_MAP.consistency;
   let bestScore = 0;
