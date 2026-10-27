@@ -65,15 +65,33 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
 
   async function save() {
     setBusy(true);
-    const next = buildPlan({
-      goal,
-      identity: plan!.identity,
-      blocker: plan!.blocker,
-      minutes_budget: budget,
-      plan_source: plan!.plan_source,
-      plan_version: plan!.plan_version + 1,
-      theme,
-    });
+    const sameGoal = goal.trim() === plan!.goal.trim();
+    // A new goal needs a new plan. Keeping the same goal (a typo, or just a
+    // different daily size) must not replace practices written for this person
+    // with the shared library ones.
+    const next = sameGoal
+      ? {
+          ...plan!,
+          goal: goal.trim(),
+          minutes_budget: budget,
+          plan_version: plan!.plan_version + 1,
+          practices: plan!.practices.map((practice) => ({
+            ...practice,
+            full_variant: {
+              ...practice.full_variant,
+              minutes: Math.min(practice.full_variant.minutes, budget),
+            },
+          })),
+        }
+      : buildPlan({
+          goal,
+          identity: plan!.identity,
+          blocker: plan!.blocker,
+          minutes_budget: budget,
+          plan_source: plan!.plan_source,
+          plan_version: plan!.plan_version + 1,
+          theme,
+        });
     const saved = await editPlan(next);
     setBusy(false);
     if (saved) onClose();
