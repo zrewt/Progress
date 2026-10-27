@@ -17,6 +17,7 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
   if (!visible) return null;
   const timezone = snapshot?.profile?.timezone ?? "UTC";
   const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const activeSeason = snapshot?.seasons.find((season) => season.status === "active") ?? null;
 
   async function toggleAi() {
     setBusy(true); setNotice(null);
@@ -76,6 +77,27 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
               </Body>
               <QuietButton label={aiAllowed ? "Turn AI suggestions off" : "Turn AI suggestions on"} onPress={() => void toggleAi()} disabled={busy} />
             </View>
+
+            {/* The stored plan records where it came from. Showing it here is the
+                difference between "I think the AI ran" and knowing. */}
+            {activeSeason ? (
+              <View style={styles.block}>
+                <Label>This plan</Label>
+                <Body style={{ fontSize: 12.5 }}>
+                  {activeSeason.plan_source === "ai"
+                    ? "Drafted by AI for your goal, then checked against the safety and time limits."
+                    : "Built on this device from the curated practices. No AI draft was used for it."}
+                </Body>
+                <Micro style={styles.muted}>
+                  Plan version {activeSeason.plan_version}
+                  {activeSeason.plan_source === "ai"
+                    ? ""
+                    : aiAllowed
+                      ? " — save a new version from Edit plan to ask the AI for a fresh draft."
+                      : " — AI suggestions are off, so plans stay on this device."}
+                </Micro>
+              </View>
+            ) : null}
 
             <View style={styles.block}>
               <Label>Help and privacy</Label>

@@ -182,6 +182,50 @@ test("a ladder rung never suggests more time than the budget", () => {
   assert.deepEqual(validatePlan(plan), []);
 });
 
+test("one branch that breaks the budget is repaired without losing the rest of the draft", () => {
+  const mixed = tree({
+    pillars: (["body", "mind", "craft", "connection"] as PillarId[]).map((pillar) =>
+      pillar === "body"
+        ? {
+            pillar,
+            focus: "Focus for body",
+            nodes: [
+              node(pillar, {
+                instructions: ["Walk for 20 minutes and think about the app.", "Stop there."],
+              }),
+            ],
+          }
+        : { pillar, focus: `Focus for ${pillar}`, nodes: [node(pillar)] },
+    ),
+  });
+  const plan = dailyPlanFromTree(answers, mixed, "edge-ai");
+  const craft = plan.practices.find((practice) => practice.branch === "craft");
+  const body = plan.practices.find((practice) => practice.branch === "body");
+  // The drafted craft practice survives; only the branch that broke is replaced.
+  assert.equal(craft?.title, "craft step for the tracking app");
+  assert.ok(body?.title);
+  assert.notEqual(body?.full_variant.steps[0], "Walk for 20 minutes and think about the app.");
+  assert.equal(plan.plan_source, "ai");
+  assert.deepEqual(validatePlan(plan), []);
+});
+
+test("a draft that cannot be repaired says plainly that it is local", () => {
+  const unusable = tree({
+    pillars: (["body", "mind", "craft", "connection"] as PillarId[]).map((pillar) => ({
+      pillar,
+      focus: `Focus for ${pillar}`,
+      nodes: [
+        node(pillar, {
+          instructions: ["Walk for 20 minutes and think about the app.", "Stop there."],
+        }),
+      ],
+    })),
+  });
+  const plan = dailyPlanFromTree(answers, unusable, "edge-ai");
+  assert.equal(plan.plan_source, "local");
+  assert.deepEqual(validatePlan(plan), []);
+});
+
 test("the on-device plan is labelled local and is built the same way", () => {
   const plan = dailyPlanFromTree(answers, tree(), "seed-engine");
   assert.equal(plan.plan_source, "local");

@@ -2,7 +2,7 @@ import type { DailyPlan, DailySnapshot, PracticeDraft, Rung } from "./daily-type
 import type { GeneratedEasy, GeneratedNode, GeneratedTree, OnboardingAnswers, PillarId, Profile, TreeNode } from "./types";
 import { PILLARS } from "./pillars";
 import { PROGRESSION } from "./progression";
-import { buildPlan, detectTheme, validatePlan, MAX_VARIANT_STEPS, type Budget } from "./plans";
+import { buildPlan, detectTheme, validatePlan, validatePractice, MAX_VARIANT_STEPS, type Budget } from "./plans";
 import { rungFor } from "./engine/week";
 import type { TreeSource } from "./gemini";
 
@@ -110,12 +110,17 @@ export function dailyPlanFromTree(
     if (pillar.focus) labels[pillar.pillar] = pillar.focus.slice(0, 60);
   }
 
+  // Branches that really came from the draft, recorded before any repair, so a
+  // repaired plan cannot be labelled as drafted just because a library practice
+  // filled the same branch.
+  const drafted = new Set<PillarId>();
   const practices = PILLARS.map((pillar) => {
     const role: PracticeDraft["role"] = pillar.id === mainBranch ? "primary" : "supporting";
     const entry = tree.pillars.find((item) => item.pillar === pillar.id);
     const built = entry?.nodes?.length
       ? practiceFromNodes(entry.nodes, pillar.id, role, budget, entry.easy)
       : null;
+    if (built) drafted.add(pillar.id);
     return built ?? base.practices.find((practice) => practice.branch === pillar.id);
   }).filter((practice): practice is PracticeDraft => Boolean(practice));
 
@@ -128,8 +133,38 @@ export function dailyPlanFromTree(
     cadence_n: 1,
   }));
 
-  const candidate: DailyPlan = { ...base, branch_labels: labels, practices: normalised };
-  return validatePlan(candidate).length ? { ...base, branch_labels: labels } : candidate;
+  // Repair one branch rather than discarding all four. Before this, a single
+  // step that named more minutes than the budget replaced the whole drafted plan
+  // with the shared library — which is how a model plan silently became a
+  // template, still labelled as drafted, with nothing on screen saying so.
+  const repaired = normalised.map((practice) =>
+    validatePractice(practice, budget).length
+      ? base.practices.find((item) => item.branch === practice.branch) ?? practice
+      : practice,
+  );
+  const fromDraft = repaired.filter(
+    (practice, index) => drafted.has(practice.branch) && practice === normalised[index],
+  ).length;
+
+  const candidate: DailyPlan = {
+    ...base,
+    // Where the plan came from is the source of the tree, not how much of it
+    // survived: an on-device tree is local even when all four branches are used.
+    plan_source: fromDraft > 0 && source === "edge-ai" ? "ai" : "local",
+    branch_labels: labels,
+    practices: repaired,
+  };
+  const problems = validatePlan(candidate);
+  if (problems.length) {
+    // Visible in the Metro logs, so "the plan looks like a template" can be told
+    // apart from "the draft was thrown away" without guessing.
+    console.warn("[plan] the drafted plan could not be saved as written:", problems);
+    return { ...base, plan_source: "local", branch_labels: labels };
+  }
+  if (fromDraft < repaired.length) {
+    console.warn(`[plan] ${repaired.length - fromDraft} branch(es) fell back to the curated library`);
+  }
+  return candidate;
 }
 
 export function presentation(snapshot: DailySnapshot): { profile: Profile | null; nodes: TreeNode[] } {

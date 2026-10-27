@@ -395,9 +395,13 @@ Deno.serve(async (req: Request) => {
     let tree: unknown = null;
     const attemptPrompt = correction ? `${prompt}\n\nCORRECTION FOR THIS ATTEMPT\n${correction}` : prompt;
     try { tree = await callModel(attemptPrompt, apiKey, model); } catch { tree = null; }
+    if (!tree) console.warn("generate-tree", JSON.stringify({ attempt, model, verdict: "no draft" }));
     if (tree) {
       sawDraft = true;
       const problem = validateTree(tree, budget);
+      // One line per attempt. This is how "did the model actually run?" gets
+      // answered from the function logs, without logging the person's goal.
+      console.log("generate-tree", JSON.stringify({ attempt, model, verdict: problem ?? "ok" }));
       if (!problem) return respond(tree, 200);
       console.error("Rejected model output", { problem });
       if (problem.startsWith(FILLER_PREFIX)) {

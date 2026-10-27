@@ -222,6 +222,35 @@ export function buildPlan(input: PlanInput): DailyPlan {
 
 const TIME_IN_STEP = /\b(\d+)\s*(?:min|mins|minute|minutes|hr|hrs|hour|hours)\b/gi;
 
+/** Problems one practice would have in production; empty means it is usable. */
+export function validatePractice(practice: PracticeDraft, budget: Budget): string[] {
+  const problems: string[] = [];
+  if (!practice.title.trim() || !practice.why.trim()) problems.push(`${practice.title || "Practice"} is missing its title or reason.`);
+  if (practice.branch !== "body" && practice.branch !== "mind" && practice.branch !== "craft" && practice.branch !== "connection") {
+    problems.push(`${practice.title} is on an unknown branch.`);
+  }
+  for (const [kind, variant] of [["full", practice.full_variant], ["easy", practice.easy_variant]] as const) {
+    if (!variant || !variant.title.trim()) problems.push(`${practice.title} has no ${kind} title.`);
+    if (!variant?.steps?.length) problems.push(`${practice.title} has no ${kind} steps.`);
+    if ((variant?.steps?.length ?? 0) > MAX_VARIANT_STEPS) {
+      problems.push(`${practice.title} has more than ${MAX_VARIANT_STEPS} ${kind} steps.`);
+    }
+    if (!variant || variant.minutes < 1 || variant.minutes > budget) {
+      problems.push(`${practice.title} ${kind} exceeds the ${budget} minute budget.`);
+    }
+    if (kind === "easy" && variant && variant.minutes > 2) {
+      problems.push(`${practice.title} easy version is not about two minutes.`);
+    }
+    for (const step of variant?.steps ?? []) {
+      if (step.length > 180) problems.push(`${practice.title} has an overlong step.`);
+      for (const match of step.matchAll(TIME_IN_STEP)) {
+        if (Number(match[1]) > budget) problems.push(`${practice.title} asks for more time than the budget in "${step}".`);
+      }
+    }
+  }
+  return problems;
+}
+
 /** Problems a plan would have in production; empty means it is usable. */
 export function validatePlan(plan: DailyPlan): string[] {
   const problems: string[] = [];
@@ -232,31 +261,7 @@ export function validatePlan(plan: DailyPlan): string[] {
   if (supporting.length > 3) problems.push("A plan may have at most three supporting practices.");
   if (!plan.practices.length) problems.push("A plan needs at least one practice.");
 
-  for (const practice of plan.practices) {
-    if (!practice.title.trim() || !practice.why.trim()) problems.push(`${practice.title || "Practice"} is missing its title or reason.`);
-    if (practice.branch !== "body" && practice.branch !== "mind" && practice.branch !== "craft" && practice.branch !== "connection") {
-      problems.push(`${practice.title} is on an unknown branch.`);
-    }
-    for (const [kind, variant] of [["full", practice.full_variant], ["easy", practice.easy_variant]] as const) {
-      if (!variant || !variant.title.trim()) problems.push(`${practice.title} has no ${kind} title.`);
-      if (!variant?.steps?.length) problems.push(`${practice.title} has no ${kind} steps.`);
-      if ((variant?.steps?.length ?? 0) > MAX_VARIANT_STEPS) {
-        problems.push(`${practice.title} has more than ${MAX_VARIANT_STEPS} ${kind} steps.`);
-      }
-      if (!variant || variant.minutes < 1 || variant.minutes > budget) {
-        problems.push(`${practice.title} ${kind} exceeds the ${budget} minute budget.`);
-      }
-      if (kind === "easy" && variant && variant.minutes > 2) {
-        problems.push(`${practice.title} easy version is not about two minutes.`);
-      }
-      for (const step of variant?.steps ?? []) {
-        if (step.length > 180) problems.push(`${practice.title} has an overlong step.`);
-        for (const match of step.matchAll(TIME_IN_STEP)) {
-          if (Number(match[1]) > budget) problems.push(`${practice.title} asks for more time than the budget in "${step}".`);
-        }
-      }
-    }
-  }
+  for (const practice of plan.practices) problems.push(...validatePractice(practice, budget));
   if (plan.plan_version < 1) problems.push("Plan version must be positive.");
   return problems;
 }
