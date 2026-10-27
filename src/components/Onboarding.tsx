@@ -629,7 +629,7 @@ export function Onboarding() {
                   </Micro>
                   <Micro style={{ color: colors.lichen }}>4 practices</Micro>
                 </View>
-                <Text style={styles.previewSummaryText}>One daily practice, plus three lighter practices for the rest of the week.</Text>
+                <Text style={styles.previewSummaryText}>{previewPlan.plan_summary}</Text>
                 <View style={styles.previewSafetyRow}>
                   <ShieldCheck
                     size={13}
@@ -659,7 +659,7 @@ export function Onboarding() {
                       </View>
                       <Text style={styles.seedDuration}>{practice.full_variant.minutes} min</Text>
                     </View>
-                    <Display style={styles.seedTitle}>{practice.title}</Display>
+                    <Display style={styles.seedTitle}>{practice.title}</Display>{practice.role === "primary" && practice.full_variant.steps[0] ? <Text style={styles.seedDesc}>First action: {practice.full_variant.steps[0]}</Text> : null}{practice.full_variant.ladder && practice.full_variant.ladder.length > 0 ? <Text style={styles.seedDesc}>By week 4: {practice.full_variant.ladder[practice.full_variant.ladder.length - 1].title}</Text> : null}
                     <Text style={styles.seedDesc}>{practice.why}</Text>
                     <Text style={styles.seedDesc}>
                       Easier version: {practice.easy_variant.minutes} min — {practice.easy_variant.title.toLowerCase()}

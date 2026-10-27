@@ -82,7 +82,7 @@ export const THEMES_A: PlanTheme[] = [
   {
     id: "strength",
     label: "Strength",
-    strong: ["strength", "strong", "stronger", "gym", "lift", "lifting", "weights", "workout", "muscle", "squat", "pushup", "deadlift"],
+    strong: ["strength", "strong", "stronger", "gym", "lift", "lifting", "weights", "workout", "muscle", "squat", "pushup", "deadlift", "fitness", "fitter", "in shape"],
     weak: ["train", "training", "exercise", "move", "body"],
     primary: {
       key: "strength-small-set",
@@ -157,7 +157,7 @@ export const THEMES_A: PlanTheme[] = [
   {
     id: "sleep",
     label: "Sleep & wind-down",
-    strong: ["sleep", "sleeping", "bedtime", "bed", "insomnia", "wake", "waking", "tired", "rest", "dream"],
+    strong: ["sleep", "sleeping", "asleep", "bedtime", "bed", "bedroom", "insomnia", "wake", "waking", "tired", "rest", "dream", "midnight", "oversleep"],
     weak: ["evening", "night", "routine", "wind", "calm"],
     needsDomainReview: true,
     primary: {
@@ -228,7 +228,7 @@ export const THEMES_A: PlanTheme[] = [
     id: "nutrition",
     label: "Food & evening habits",
     strong: ["eat", "eating", "meal", "meals", "food", "snack", "snacking", "sugar", "diet", "nutrition", "cook", "cooking", "kitchen", "hunger"],
-    weak: ["night", "evening", "late", "habit", "drink", "water"],
+    weak: ["night", "evening", "late", "drink", "water", "cravings"],
     needsDomainReview: true,
     primary: {
       key: "nutrition-steady-meal",

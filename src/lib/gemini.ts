@@ -112,43 +112,47 @@ function templatesForTheme(
 ): Record<PillarId, ThemeBranchTemplate> {
   const shortGoal = goal.trim() || "your 30-day goal";
 
+  // One practice for the body that actually serves a sitting, thinking goal:
+  // leave the screen, move, and come back with the next step decided. Each node
+  // is the same act one step further, so the four weeks form a ramp rather than
+  // four unrelated exercises.
   const commonBody: ThemeBranchTemplate = {
-    focus: "Energy & Physical Readiness",
+    focus: "A body that can stay with the work",
     nodes: [
       {
-        title: "Two-Minute Posture & Breath Reset",
+        title: "Two minutes away from the screen",
         minutes: 2,
-        description: `Wake up your nervous system so you have clean energy for "${shortGoal}".`,
+        description: `Leave the screen before you start "${shortGoal}", so you begin with your own attention rather than the last thing you read.`,
         steps: [
-          "Stand up, roll your shoulders back, and take 4 slow nasal breaths.",
-          "Reach overhead for 20 seconds, then shake out your hands and jaw.",
+          "Stand and walk to the far side of the room without your phone.",
+          "Name the first thing you will do when you sit back down.",
         ],
       },
       {
-        title: "Ten-Minute Daylight Walk",
+        title: "The short walk that solves it",
         minutes: 10,
-        description: `A brisk walk outside to clear mental fog before working on "${shortGoal}".`,
+        description: `Movement is where the next step usually appears, not more staring at "${shortGoal}".`,
         steps: [
-          "Step outside for a 10-minute walk at a conversational pace.",
-          "Keep your eyes on the horizon and let your mind settle on today's single priority.",
+          "Walk outside or the length of your space until you can say the problem in one sentence.",
+          "Decide the one thing you will try first when you get back.",
         ],
       },
       {
-        title: "Steady Movement Circuit",
-        minutes: 12,
-        description: "Build baseline stamina so your body supports your daily focus.",
-        steps: [
-          "Cycle through 8 squats, 6 incline push-ups, and a 20-second plank for 3 easy rounds.",
-          "Breathe steadily through your nose and keep 2 reps in reserve.",
-        ],
-      },
-      {
-        title: "Evening Wind-Down & Recovery",
+        title: "Walk, decide, then do the first thing",
         minutes: 15,
-        description: "Protect tomorrow's energy with a deliberate physical off-switch.",
+        description: "The walk only pays off if the first action happens before the day gets loud.",
         steps: [
-          "Dim the lights and spend 5 minutes stretching your hips, back, and neck.",
-          "Drink a glass of water and set out what you need for tomorrow morning.",
+          "Walk until the next step is clear, then come straight back in.",
+          "Do that one action before you open anything else.",
+        ],
+      },
+      {
+        title: "End the day on your feet",
+        minutes: 10,
+        description: `Close "${shortGoal}" with your body, not another screen.`,
+        steps: [
+          "Walk outside without your phone and let the day settle.",
+          "Set out what you need for tomorrow's first step, then stop.",
         ],
       },
     ],

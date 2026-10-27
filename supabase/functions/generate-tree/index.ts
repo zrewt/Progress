@@ -117,7 +117,7 @@ async function rest<T>(path: string, authorization: string, init: RequestInit = 
 const GENERIC_FILLER: [RegExp, string][] = [
   [/\bedit (a|the) file\b/i, "edit a file"],
   [/\bwork on your (project|goal)\b/i, "work on your project"],
-  [/\b(reset|roll) your shoulders\b/i, "reset your shoulders"],
+  [/\breset your (shoulders|body|mind)\b/i, "reset your shoulders"],
   [/\bcheck in with yourself\b/i, "check in with yourself"],
   [/\breflect on your (progress|day|journey)\b/i, "reflect on your progress"],
 ];
@@ -170,13 +170,16 @@ body, mind, craft, connection, in that order. Four nodes each.
 EACH BRANCH ALSO NEEDS A TWO-MINUTE VERSION
 "easy" is the smallest honest version of that branch's week-1 practice: one to three steps, no setup, no equipment, no decisions. It is its own action, not the full node cut in half.
 
+WHAT THE PERSON WILL SEE FIRST
+The summary is shown as the promise of the plan, above the practices. It must say what will exist at the end of these 30 days that does not exist now, and the smallest daily act that gets them there. The first instruction of each branch is shown as "your first action", and the week-4 node as "where this leads", so both have to stand on their own.
+
 JSON — exactly this shape, nothing around it:
-{"summary":"what these 30 days build and why it fits this person; max 300 characters; plain language",
+{"summary":"what will exist at the end of 30 days that does not exist now, plus the smallest daily act that gets them there; max 300 characters; plain language; no vague encouragement",
  "safetyNote":"max 240 characters; pacing and stopping; no medical advice",
  "pillars":[
   {"pillar":"body","focus":"max 48 characters — the specific angle this goal gives the body branch",
    "easy":{"title":"max 70 characters","steps":["one to three actions, max 18 words each"]},
-   "nodes":[{"title":"max 70","duration":"N min","description":"why this, for this person; max 200 characters","instructions":["two to five actions, max 18 words each"]}, ...four nodes]},
+   "nodes":[{"title":"max 70","duration":"N min","description":"the gain this act produces for their goal, named plainly; max 200 characters","instructions":["two to five actions, max 18 words each"]}, ...four nodes]},
   ...mind, craft, connection]}
 
 Hard limits: steps name actions only, never "consider", "think about", "reflect on" or "explore". No calorie counts, weight targets, fasting, sleep restriction, substances or medical advice. No shame, no "discipline", no "no excuses". Never describe yourself or the app. Output JSON only.`;

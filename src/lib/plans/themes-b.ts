@@ -35,16 +35,19 @@ export const THEMES_B: PlanTheme[] = [
       {
         key: "coding-body-reset",
         branch: "body",
-        title: "Stand and reset your shoulders",
-        why: "A body held in one shape starts to feel like a mind in one shape.",
+        title: "Take the walk that thinks",
+        why: "The next step usually arrives while you are away from the keyboard, not while you stare at it.",
         full: [
-          "Stand up and let your arms hang.",
-          "Roll your shoulders back slowly a few times.",
-          "Look at something far away from the screen.",
-          "Take one slow breath before you sit back down.",
+          "Leave the screen and walk without your phone.",
+          "Say the problem out loud as if explaining it to someone.",
+          "Name the one thing you will try first when you sit back down.",
+          "Return and do only that thing.",
         ],
         easyTitle: "The two-minute version",
-        easy: ["Stand and stretch your arms overhead.", "Look at something across the room."],
+        easy: [
+          "Stand and walk to the far side of the room.",
+          "Say the problem in one sentence before you return.",
+        ],
       },
       {
         key: "coding-read-one-thing",
@@ -148,7 +151,7 @@ export const THEMES_B: PlanTheme[] = [
     id: "mindfulness",
     label: "Stress & attention",
     strong: ["stress", "stressed", "anxiety", "anxious", "calm", "meditate", "meditation", "mindful", "mindfulness", "breathe", "breathing", "panic", "overwhelm", "overwhelmed", "grounding"],
-    weak: ["quiet", "peace", "present", "focus"],
+    weak: ["quiet", "peace", "present", "focus", "phone", "scrolling", "attention"],
     primary: {
       key: "mindfulness-follow-breath",
       branch: "mind",
@@ -215,8 +218,8 @@ export const THEMES_B: PlanTheme[] = [
   {
     id: "connection",
     label: "People & belonging",
-    strong: ["friend", "friends", "friendship", "family", "social", "connection", "connect", "lonely", "loneliness", "community", "relationship", "people"],
-    weak: ["together", "partner", "group", "talk"],
+    strong: ["friend", "friends", "friendship", "family", "social", "connection", "connect", "lonely", "loneliness", "community", "relationship", "people", "sister", "brother", "mother", "mom", "mum", "father", "dad", "parent", "parents", "grandma", "grandpa", "cousin", "aunt", "uncle", "wife", "husband", "partner", "kids", "child", "children", "daughter", "son"],
+    weak: ["together", "group", "talk", "call", "visit", "reconnect", "catch"],
     primary: {
       key: "connection-reach-out",
       branch: "connection",
@@ -307,7 +310,7 @@ export const THEMES_B: PlanTheme[] = [
       {
         key: "consistency-stand-reset",
         branch: "body",
-        title: "Stand up and reset",
+        title: "Stand and stretch once",
         why: "The body is the easiest place to prove that you showed up.",
         full: [
           "Stand and let your arms hang.",
