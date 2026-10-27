@@ -35,7 +35,7 @@ import { PrimaryButton, QuietButton } from "./src/components/Controls";
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function Root() {
-  const { loading, user, profile, cloudEnabled, loadFailed, error, retryLoad, signOut, recovering } = useGame();
+  const { loading, user, profile, snapshot, cloudEnabled, loadFailed, error, retryLoad, signOut, recovering } = useGame();
 
   return (
     <>
@@ -43,7 +43,9 @@ function Root() {
         <SetupRequired />
       ) : recovering ? (
         <ResetPasswordScreen />
-      ) : loading ? (
+      ) : loading && !snapshot ? (
+        // A refresh (after saving consent, say) must never unmount the screen the
+        // person is in the middle of — that would wipe their answers and start over.
         <LoadingScreen />
       ) : loadFailed && user ? (
         <View style={{ flex: 1, justifyContent: "center", padding: 24, gap: 20 }}>

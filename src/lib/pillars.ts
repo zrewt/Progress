@@ -128,6 +128,12 @@ export const BLOCKERS: BlockerMeta[] = [
     strategy: "Anchor every branch with a 2-minute floor that is too small to skip.",
   },
   {
+    id: "time",
+    label: "No time left in the day",
+    subtitle: "Work and home take the hours I meant to use",
+    strategy: "Protect one fixed slot you already have instead of hunting for spare time.",
+  },
+  {
     id: "distraction",
     label: "Phone & scroll loops",
     subtitle: "My attention gets hijacked before I begin",
@@ -144,6 +150,18 @@ export const BLOCKERS: BlockerMeta[] = [
     label: "Low energy at day's end",
     subtitle: "By the time I'm free, I'm too drained to push",
     strategy: "Keep actions restorative and front-load the smallest win early.",
+  },
+  {
+    id: "stress",
+    label: "Stress or a low mood",
+    subtitle: "When I feel bad, the plan is the first thing to go",
+    strategy: "Make the smallest version the default on hard days and count it fully.",
+  },
+  {
+    id: "perfectionism",
+    label: "All or nothing",
+    subtitle: "If I can't do it properly, I skip it entirely",
+    strategy: "Define done as two minutes, so a partial day is still a finished day.",
   },
 ];
 

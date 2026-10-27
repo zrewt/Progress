@@ -8,7 +8,10 @@ export type BlockerId =
   | "consistency"
   | "distraction"
   | "overthinking"
-  | "energy";
+  | "energy"
+  | "time"
+  | "stress"
+  | "perfectionism";
 
 export interface PillarMeta {
   id: PillarId;

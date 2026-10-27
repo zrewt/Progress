@@ -81,6 +81,12 @@ function blockerStep(blocker: BlockerId): string {
       return "Do not plan or edit — start the timer and take the very first action within 10 seconds.";
     case "energy":
       return "Keep the effort at 60% so you finish with more energy than you started with.";
+    case "time":
+      return "Attach the practice to a slot you already keep — after a meal or before a shower — never to leftover time.";
+    case "stress":
+      return "Keep the easiest version ready for low days; a two-minute day still counts completely.";
+    case "perfectionism":
+      return "Stop at two minutes even when it is going well, so finishing stays easy to repeat.";
     case "consistency":
     default:
       return "Stop on time while it still feels easy so tomorrow's repetition is automatic.";

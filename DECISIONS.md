@@ -22,6 +22,7 @@
 7. Finishing a season always starts a new one, either continuing the same goal (new plan version) or with a new goal, so the app never leaves an account with no active season and a blank dashboard. The old season is archived by the rollover and listed under past seasons; it is never deleted.
 8. Editing a goal or time budget writes a new `plan_versions` row, retires the old practices and rebuilds milestones. Milestones are derived (not sticky awards), so rebuilding them cannot lose earned XP or history; completion events keep pointing at the retired practice rows.
 9. `NodeModal` was removed: the practice sheet replaced it, and leaving it in place would keep a second, contradictory completion path and developer wording in the codebase.
+10. The blocker question offers seven answers, not four: no time, stress or low mood, and all-or-nothing were added because the original set assumed the problem was always motivation. Each blocker carries a `strategy` used by the local plan and its own instruction line in the AI prompt (`blockerStep`), so a new blocker cannot be stored and then ignored.
 
 ## Stage 3
 
