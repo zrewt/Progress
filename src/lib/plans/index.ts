@@ -31,6 +31,13 @@ export const THEME_MAP = Object.fromEntries(
 export const BUDGETS = [5, 15, 30] as const;
 export type Budget = (typeof BUDGETS)[number];
 
+/**
+ * A variant may hold at most five steps. This is the same limit the database
+ * enforces in start_next_season/update_plan ("Invalid variant") and the Edge
+ * Function applies to generated instructions, so the three cannot drift apart.
+ */
+export const MAX_VARIANT_STEPS = 5;
+
 /** Lowercase, strip punctuation and fold simple word forms so order does not matter. */
 export function normalizeGoal(goal: string): string[] {
   return goal
@@ -92,7 +99,10 @@ export function variantFor(practice: ThemePractice, budget: Budget, kind: "full"
   if (kind === "easy") {
     return { title: practice.easyTitle, minutes: Math.min(2, budget), steps: [...practice.easy] };
   }
-  const steps = budget >= 15 && practice.deep ? [...practice.full, ...practice.deep] : [...practice.full];
+  const steps =
+    budget >= 15 && practice.deep
+      ? [...practice.full, ...practice.deep].slice(0, MAX_VARIANT_STEPS)
+      : [...practice.full];
   return { title: practice.title, minutes: budget, steps };
 }
 
@@ -189,6 +199,9 @@ export function validatePlan(plan: DailyPlan): string[] {
     for (const [kind, variant] of [["full", practice.full_variant], ["easy", practice.easy_variant]] as const) {
       if (!variant || !variant.title.trim()) problems.push(`${practice.title} has no ${kind} title.`);
       if (!variant?.steps?.length) problems.push(`${practice.title} has no ${kind} steps.`);
+      if ((variant?.steps?.length ?? 0) > MAX_VARIANT_STEPS) {
+        problems.push(`${practice.title} has more than ${MAX_VARIANT_STEPS} ${kind} steps.`);
+      }
       if (!variant || variant.minutes < 1 || variant.minutes > budget) {
         problems.push(`${practice.title} ${kind} exceeds the ${budget} minute budget.`);
       }

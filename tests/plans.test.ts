@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { THEMES, detectTheme, buildPlan, validatePlan, alternativesFor, BUDGETS } from "../src/lib/plans";
+import {
+  THEMES,
+  detectTheme,
+  buildPlan,
+  validatePlan,
+  alternativesFor,
+  variantFor,
+  BRANCH_ALTERNATIVES,
+  BUDGETS,
+  MAX_VARIANT_STEPS,
+} from "../src/lib/plans";
 
 const GOALS: [string, string][] = [
   ["Run my first 5k", "running"],
@@ -76,7 +86,32 @@ test("variants stay inside the budget and the easy version is about two minutes"
         assert.ok(practice.easy_variant.minutes <= 2);
         assert.ok(practice.easy_variant.steps.length >= 2);
         assert.ok(practice.full_variant.steps.length >= 3);
+        // The database rejects a variant with more than five steps, so content
+        // that grows past the cap must fail here rather than in production.
+        assert.ok(
+          practice.full_variant.steps.length <= MAX_VARIANT_STEPS,
+          `${theme.id} ${budget}min ${practice.title} has ${practice.full_variant.steps.length} steps`,
+        );
+        assert.ok(practice.easy_variant.steps.length <= MAX_VARIANT_STEPS, `${theme.id} easy steps`);
         assert.notEqual(practice.full_variant.title, practice.easy_variant.title);
+      }
+    }
+  }
+});
+
+test("replacement practices also fit the step limit the server enforces", () => {
+  for (const branch of Object.keys(BRANCH_ALTERNATIVES) as (keyof typeof BRANCH_ALTERNATIVES)[]) {
+    for (const practice of BRANCH_ALTERNATIVES[branch]) {
+      for (const budget of [15, 30] as const) {
+        for (const kind of ["full", "easy"] as const) {
+          const variant = variantFor(practice, budget, kind);
+          assert.ok(variant.steps.length >= 1, practice.key);
+          assert.ok(
+            variant.steps.length <= MAX_VARIANT_STEPS,
+            `${practice.key} ${kind} at ${budget}min has ${variant.steps.length} steps`,
+          );
+          assert.ok(variant.minutes <= budget, practice.key);
+        }
       }
     }
   }
@@ -95,6 +130,14 @@ test("a plan that breaks the budget or adds obligations is rejected", () => {
 
   const emptySteps = { ...plan, practices: plan.practices.map((p, i) => (i === 0 ? { ...p, easy_variant: { ...p.easy_variant, steps: [] } } : p)) };
   assert.ok(validatePlan(emptySteps).some((problem) => problem.includes("no easy steps")));
+
+  const tooManySteps = {
+    ...plan,
+    practices: plan.practices.map((p, i) =>
+      i === 0 ? { ...p, full_variant: { ...p.full_variant, steps: ["One.", "Two.", "Three.", "Four.", "Five.", "Six."] } } : p,
+    ),
+  };
+  assert.ok(validatePlan(tooManySteps).some((problem) => problem.includes("more than 5")));
 });
 
 test("replacement options stay on the branch and never repeat the plan", () => {
