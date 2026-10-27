@@ -1,6 +1,6 @@
 // Supabase Edge Function: generate-tree
 // Deploy ONLY after approval:
-//   supabase secrets set GEMINI_API_KEY=... GEMINI_MODEL=gemini-2.5-flash
+//   supabase secrets set GEMINI_API_KEY=... (GEMINI_MODEL optional)
 //   supabase functions deploy generate-tree
 // Never put keys in this file or in the app bundle.
 
@@ -21,6 +21,16 @@ const CORS_HEADERS = {
 const MAX_BODY_BYTES = 8192;
 const DAILY_LIMIT = 20;
 const TIMEOUT_MS = 15_000;
+
+/**
+ * Model names, newest usable first.
+ *
+ * Google retires models for new projects without notice — 2.5 Flash began
+ * answering "no longer available to new users" in mid-2026 — so the name lives
+ * here, in order, instead of in one hard-coded string. Only a missing or retired
+ * model moves on to the next name; any other failure stops immediately.
+ */
+const MODEL_FALLBACKS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
 
 interface RequestPayload {
   identity?: string;
@@ -356,6 +366,26 @@ async function callModel(
   }
 }
 
+/**
+ * Tries each model name in turn, but only when the failure is the model itself
+ * being unknown or retired. An invalid key or a spent quota stops at the first
+ * attempt: trying three names would just make the same error three times slower.
+ */
+async function callWithFallback(
+  prompt: string,
+  apiKey: string,
+  models: string[],
+): Promise<{ tree: unknown } | { failure: string }> {
+  let failure = "";
+  for (const name of models) {
+    const result = await callModel(prompt, apiKey, name);
+    if ("tree" in result) return result;
+    failure = `${name}: ${result.failure}`;
+    if (!/HTTP 404|NOT_FOUND|no longer available|not found/i.test(result.failure)) return result;
+  }
+  return { failure };
+}
+
 // @ts-expect-error Deno global is provided by the Edge Runtime
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
@@ -413,7 +443,11 @@ Deno.serve(async (req: Request) => {
   // in the app, which is otherwise a day of guessing.
   if (!apiKey) return respond({ error: "Plan drafting is not switched on for this app yet.", code: "no_key" }, 503);
 
-  const model = env("GEMINI_MODEL") || "gemini-2.5-flash";
+  const configured = env("GEMINI_MODEL");
+  const models = configured
+    ? [configured, ...MODEL_FALLBACKS.filter((name) => name !== configured)]
+    : MODEL_FALLBACKS;
+  const model = models[0];
   const prompt = buildPrompt(
     { identity, goal, blocker, timeBudget, focus: focus || "a personal practice", branch, stage },
     readHistory(body.history),
@@ -439,7 +473,7 @@ Deno.serve(async (req: Request) => {
     let tree: unknown = null;
     const attemptPrompt = correction ? `${prompt}\n\nCORRECTION FOR THIS ATTEMPT\n${correction}` : prompt;
     try {
-      const result = await callModel(attemptPrompt, apiKey, model);
+      const result = await callWithFallback(attemptPrompt, apiKey, models);
       if ("tree" in result) tree = result.tree;
       else lastFailure = result.failure;
     } catch {

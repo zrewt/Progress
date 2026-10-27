@@ -56,7 +56,7 @@ true, stop and re-run the grant statements from `202610250001_daily_loop.sql`.
 ## 2. Edge Functions (approval required)
 
 - `generate-tree`:
-  - `supabase secrets set GEMINI_API_KEY=<key> GEMINI_MODEL=gemini-2.5-flash`
+  - `supabase secrets set GEMINI_API_KEY=<key>` (the function defaults to `gemini-3.8-flash` and falls back to `gemini-3.6-flash` when a name is retired; set `GEMINI_MODEL` only to pin a different model)
   - `supabase functions deploy generate-tree`
 - `delete-account`:
   - `supabase secrets set SERVICE_ROLE_KEY=<service role key>`
