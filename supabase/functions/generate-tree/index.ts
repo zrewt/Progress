@@ -305,7 +305,32 @@ function validateTree(raw: unknown, budget: number): string | null {
   return null;
 }
 
-async function callModel(prompt: string, apiKey: string, model: string) {
+/** A failure worth reading: the status, and the provider's own short message. */
+function upstreamMessage(status: number, body: string) {
+  let message = "";
+  try {
+    message = String((JSON.parse(body) as { error?: { message?: unknown } })?.error?.message ?? "");
+  } catch {
+    message = body;
+  }
+  const cleaned = message
+    .replace(/key=[^&\s"]+/gi, "key=***")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 140);
+  return `HTTP ${status}${cleaned ? `: ${cleaned}` : ""}`;
+}
+
+/**
+ * The provider call, with its failure surfaced instead of swallowed. Returning
+ * null for every non-200 hid an invalid key behind the same "unavailable" line
+ * as a network outage, which is unfixable from the logs.
+ */
+async function callModel(
+  prompt: string,
+  apiKey: string,
+  model: string,
+): Promise<{ tree: unknown } | { failure: string }> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(endpoint, {
     method: "POST",
@@ -316,26 +341,34 @@ async function callModel(prompt: string, apiKey: string, model: string) {
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!res.ok) return null;
-  const data = await res.json();
+  if (!res.ok) return { failure: upstreamMessage(res.status, await res.text().catch(() => "")) };
+  const data = await res.json().catch(() => null);
   const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  if (!text) {
+    const blocked = data?.promptFeedback?.blockReason;
+    return { failure: blocked ? `blocked: ${blocked}` : "empty response" };
+  }
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  try { return JSON.parse(cleaned); } catch { return null; }
+  try {
+    return { tree: JSON.parse(cleaned) };
+  } catch {
+    return { failure: "the reply was not valid JSON" };
+  }
 }
 
 // @ts-expect-error Deno global is provided by the Edge Runtime
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
-  if (req.method !== "POST") return respond({ error: "Method not allowed" }, 405);
+  if (req.method !== "POST") return respond({ error: "Method not allowed", code: "method" }, 405);
 
   const caller = await verifyCaller(req).catch(() => null);
-  if (!caller) return respond({ error: "Sign in to draft a plan." }, 401);
+  if (!caller) return respond({ error: "Sign in to draft a plan.", code: "auth" }, 401);
 
   const raw = await req.text();
-  if (raw.length > MAX_BODY_BYTES) return respond({ error: "That request is too large." }, 413);
+  if (raw.length > MAX_BODY_BYTES) return respond({ error: "That request is too large.", code: "input" }, 413);
 
   let body: RequestPayload;
-  try { body = JSON.parse(raw) as RequestPayload; } catch { return respond({ error: "Invalid request." }, 400); }
+  try { body = JSON.parse(raw) as RequestPayload; } catch { return respond({ error: "Invalid request.", code: "input" }, 400); }
 
   const identity = String(body.identity ?? "creator").slice(0, 32);
   const goal = scrubPii(String(body.goal ?? "").trim()).slice(0, 140);
@@ -351,9 +384,11 @@ Deno.serve(async (req: Request) => {
   const stage = STAGES[stageKey] ?? STAGES.nothing;
 
   const verdict = assessGoal(goal);
-  if (verdict.kind === "decline") return respond({ error: verdict.message ?? "That goal cannot be supported." }, 400);
+  if (verdict.kind === "decline") {
+    return respond({ error: verdict.message ?? "That goal cannot be supported.", code: "goal" }, 400);
+  }
   if (verdict.kind === "support" && verdict.support === "self-harm") {
-    return respond({ error: verdict.message ?? "Please reach out for support." }, 400);
+    return respond({ error: verdict.message ?? "Please reach out for support.", code: "goal" }, 400);
   }
 
   const profile = await rest<{ ai_consent_version: string | null; ai_consent_at: string | null }[]>(
@@ -361,17 +396,22 @@ Deno.serve(async (req: Request) => {
     caller.authorization,
   ).catch(() => null);
   if (!profile?.length || !profile[0].ai_consent_at || !profile[0].ai_consent_version) {
-    return respond({ error: "AI suggestions need your permission first." }, 403);
+    return respond({ error: "AI suggestions need your permission first.", code: "consent" }, 403);
   }
 
   const quota = await rest<boolean>("rpc/consume_generation_quota", caller.authorization, {
     method: "POST",
     body: JSON.stringify({ p_limit: DAILY_LIMIT }),
   }).catch(() => null);
-  if (quota === false) return respond({ error: "You have reached today's plan limit. The on-device plan still works." }, 429);
+  if (quota === false) {
+    return respond({ error: "You have reached today's plan limit. The on-device plan still works.", code: "quota" }, 429);
+  }
 
   const apiKey = env("GEMINI_API_KEY");
-  if (!apiKey) return respond({ error: "Plan drafting is unavailable right now." }, 503);
+  // A missing key is a setup problem, not a model problem. Reporting it as its
+  // own code makes "never configured" distinguishable from "model unreachable"
+  // in the app, which is otherwise a day of guessing.
+  if (!apiKey) return respond({ error: "Plan drafting is not switched on for this app yet.", code: "no_key" }, 503);
 
   const model = env("GEMINI_MODEL") || "gemini-2.5-flash";
   const prompt = buildPrompt(
@@ -391,11 +431,23 @@ Deno.serve(async (req: Request) => {
   // Tells the client whether to say "the draft was rejected" or "we could not
   // reach the model", which are different problems for the person to act on.
   let sawDraft = false;
+  // The last real reason, carried to the client so a failure names itself
+  // instead of becoming "the AI could not be reached" for every cause.
+  let lastFailure = "";
+  let lastProblem = "";
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let tree: unknown = null;
     const attemptPrompt = correction ? `${prompt}\n\nCORRECTION FOR THIS ATTEMPT\n${correction}` : prompt;
-    try { tree = await callModel(attemptPrompt, apiKey, model); } catch { tree = null; }
-    if (!tree) console.warn("generate-tree", JSON.stringify({ attempt, model, verdict: "no draft" }));
+    try {
+      const result = await callModel(attemptPrompt, apiKey, model);
+      if ("tree" in result) tree = result.tree;
+      else lastFailure = result.failure;
+    } catch {
+      lastFailure = "the request to the model failed";
+    }
+    if (!tree) {
+      console.warn("generate-tree", JSON.stringify({ attempt, model, verdict: lastFailure || "no draft" }));
+    }
     if (tree) {
       sawDraft = true;
       const problem = validateTree(tree, budget);
@@ -403,6 +455,7 @@ Deno.serve(async (req: Request) => {
       // answered from the function logs, without logging the person's goal.
       console.log("generate-tree", JSON.stringify({ attempt, model, verdict: problem ?? "ok" }));
       if (!problem) return respond(tree, 200);
+      lastProblem = problem;
       console.error("Rejected model output", { problem });
       if (problem.startsWith(FILLER_PREFIX)) {
         correction = `The previous draft used placeholder wording ("${problem.slice(FILLER_PREFIX.length)}"), which fits any goal and therefore helps nobody. Rewrite every practice and step so it names this person's actual screens, files, tools, subjects or people. Do not use that wording again.`;
@@ -413,6 +466,6 @@ Deno.serve(async (req: Request) => {
   }
 
   return sawDraft
-    ? respond({ error: "The plan could not be drafted safely. A local plan is ready instead." }, 502)
-    : respond({ error: "Plan drafting is unavailable right now." }, 503);
+    ? respond({ error: "The plan could not be drafted safely. A local plan is ready instead.", code: "rejected", detail: lastProblem }, 502)
+    : respond({ error: "Plan drafting could not reach the model.", code: "model", detail: lastFailure }, 503);
 });

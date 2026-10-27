@@ -311,11 +311,16 @@ function GeneratingOverlay({
   );
 }
 
+// Each reason names a different problem, because each one needs a different fix.
+// "The AI could not be reached" used to cover all of them, which made a switch
+// that was never turned on look like a network outage.
 const FALLBACK_COPY: Record<FallbackReason, string> = {
-  off: "AI suggestions are off, so this plan comes from the app's own library rather than the model.",
-  limit: "Today's AI drafts are used up, so this plan comes from the app's own library.",
-  rejected: "The AI draft did not pass the safety and shape checks, so this plan comes from the app's own library.",
-  unavailable: "The AI could not be reached, so this plan comes from the app's own library.",
+  off: "AI suggestions are off, so the app's starter library wrote this from your goal words.",
+  consent: "Your account has no AI permission recorded yet, so the starter library wrote this.",
+  limit: "Today's AI drafts are used up, so the starter library wrote this.",
+  rejected: "The AI draft failed the safety or shape checks, so the starter library wrote this.",
+  setup: "AI drafting is not switched on for this app yet, so the starter library wrote this.",
+  unavailable: "The AI could not be reached, so the starter library wrote this.",
 };
 
 export function Onboarding() {
@@ -401,12 +406,23 @@ export function Onboarding() {
       return;
     }
     if (step === 3 && preview) {
-      setPlanting(true);
-      try {
-        await submitOnboarding(fullAnswers(), preview);
-      } finally {
-        setPlanting(false);
+      // A plan the model did not write is not silently accepted: the main action
+      // becomes one more attempt, and using the starter plan is its own choice.
+      if (preview.source === "seed-engine" && aiAllowed) {
+        await buildPreview(true);
+        return;
       }
+      await handleUseStarter();
+    }
+  }
+
+  async function handleUseStarter() {
+    if (!preview || planting) return;
+    setPlanting(true);
+    try {
+      await submitOnboarding(fullAnswers(), preview);
+    } finally {
+      setPlanting(false);
     }
   }
 
@@ -632,11 +648,33 @@ export function Onboarding() {
               <View style={styles.previewSummaryCard}>
                 <View style={styles.previewBadgeRow}>
                   <Micro style={{ color: colors.copperLight }}>
-                    {preview.source === "edge-ai" ? "Drafted with AI" : "Built on this device"}
+                    {preview.source === "edge-ai" ? "Drafted with AI" : "Starter plan"}
                   </Micro>
                   <Micro style={{ color: colors.lichen }}>4 practices</Micro>
                 </View>
-                <Text style={styles.previewSummaryText}>{previewPlan.plan_summary}</Text>{preview.source === "seed-engine" ? <Micro style={{ marginTop: 8, textTransform: "none", letterSpacing: 0.3, color: colors.sage }}>{FALLBACK_COPY[preview.reason ?? "unavailable"]}</Micro> : null}
+                <Text style={styles.previewSummaryText}>{previewPlan.plan_summary}</Text>
+                {preview.source === "seed-engine" ? (
+                  <View style={styles.starterCard}>
+                    <Text style={styles.starterTitle}>This is not an AI plan</Text>
+                    <Text style={styles.starterBody}>
+                      {FALLBACK_COPY[preview.reason ?? "unavailable"]}
+                    </Text>
+                    {preview.detail ? (
+                      <Text style={styles.starterDetail}>{preview.detail}</Text>
+                    ) : null}
+                    <Pressable
+                      onPress={() => void handleUseStarter()}
+                      disabled={planting || generating}
+                      accessibilityRole="button"
+                      accessibilityLabel="Use this starter plan"
+                      style={styles.gentlerBtn}
+                    >
+                      <Text style={styles.gentlerBtnText}>
+                        {planting ? "Planting" : "Use this starter plan instead"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
                 <View style={styles.previewSafetyRow}>
                   <ShieldCheck
                     size={13}
@@ -675,7 +713,7 @@ export function Onboarding() {
                 );
               })}
 
-              {preview.source === "seed-engine" && aiAllowed ? (<Pressable onPress={() => void buildPreview(true)} disabled={generating} accessibilityRole="button" accessibilityLabel="Ask the AI to draft the plan again" style={styles.gentlerBtn}><Text style={styles.gentlerBtnText}>Ask the AI to draft this again</Text></Pressable>) : null}{answers.timeBudget !== "5" ? (
+              {answers.timeBudget !== "5" ? (
                 <Pressable
                   onPress={() => void handleMakeGentler()}
                   accessibilityRole="button"
@@ -714,9 +752,11 @@ export function Onboarding() {
           <PrimaryButton
             label={
               step === 2
-                ? "Build my seed plan"
+                ? "Build my plan"
                 : step === 3
-                  ? "Grow my tree"
+                  ? preview?.source === "seed-engine" && aiAllowed
+                    ? "Try the AI again"
+                    : "Grow my tree"
                   : "Continue"
             }
             onPress={() => void handleContinue()}
@@ -947,6 +987,17 @@ const styles = StyleSheet.create({
     color: colors.sage,
   },
   previewWrap: { gap: 10 },
+  starterCard: {
+    marginTop: 12,
+    gap: 7,
+    padding: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.clay,
+    backgroundColor: alpha(colors.clay, 0.07),
+  },
+  starterTitle: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.bone },
+  starterBody: { fontFamily: fonts.sans, fontSize: 11.5, lineHeight: 17, color: colors.boneDim },
+  starterDetail: { fontFamily: fonts.mono, fontSize: 10.5, lineHeight: 15, color: colors.sage },
   previewSummaryCard: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: alpha(colors.lichen, 0.35),

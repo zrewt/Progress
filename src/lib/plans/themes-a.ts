@@ -82,7 +82,7 @@ export const THEMES_A: PlanTheme[] = [
   {
     id: "strength",
     label: "Strength",
-    strong: ["strength", "strong", "stronger", "gym", "lift", "lifting", "weights", "workout", "muscle", "squat", "pushup", "deadlift", "fitness", "fitter", "in shape"],
+    strong: ["strength", "strong", "stronger", "gym", "lift", "lifting", "weights", "workout", "muscle", "squat", "pushup", "deadlift", "fitness", "fitter", "in shape", "tennis", "soccer", "football", "basketball", "hockey", "swim", "swimming", "cycle", "cycling", "bike", "climb", "climbing", "golf", "badminton", "volleyball", "rugby", "cricket", "boxing", "martial arts", "sprint", "sport", "sports", "athletic", "athlete"],
     weak: ["train", "training", "exercise", "move", "body"],
     primary: {
       key: "strength-small-set",

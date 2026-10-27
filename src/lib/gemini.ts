@@ -30,6 +30,8 @@ export interface TreeResult {
   tree: GeneratedTree;
   source: TreeSource;
   reason?: FallbackReason;
+  /** The server's own short reason, when it has one worth reading. */
+  detail?: string;
 }
 
 type GoalTheme =
@@ -59,7 +61,11 @@ function detectGoalTheme(goal: string, identity: IdentityId): GoalTheme {
   if (/\b(sleep|recover|rest|wake|bed|insomnia)\b/.test(lower)) {
     return "sleep";
   }
-  if (/\b(strength|strong|lift|push-?up|gym|workout|muscle|move my body)\b/.test(lower)) {
+  if (
+    /\b(strength|strong|lift|push-?up|gym|workout|muscle|move my body|tennis|soccer|football|basketball|hockey|swim|swimming|cycl\w*|bike|climb\w*|golf|badminton|volleyball|rugby|cricket|boxing|martial arts|sprint\w*|sport\w*|athlet\w*)\b/.test(
+      lower,
+    )
+  ) {
     return "strength";
   }
   if (/\b(code|coding|program|app|project|ship|software|build|launch)\b/.test(lower)) {
@@ -912,6 +918,32 @@ export function normalizeTree(
 }
 
 /**
+ * The function answers with a `code` as well as an error message. Reading it is
+ * what lets the app say "drafting is not switched on" instead of guessing that
+ * the network was down.
+ */
+async function functionFailure(
+  error: unknown,
+): Promise<{ code: string | null; detail: string | null }> {
+  const context = (error as { context?: unknown } | null | undefined)?.context as
+    | { json?: () => Promise<unknown>; clone?: () => unknown }
+    | undefined;
+  if (!context || typeof context.json !== "function") return { code: null, detail: null };
+  try {
+    const source = typeof context.clone === "function" ? context.clone() : context;
+    const body = (await (source as { json: () => Promise<unknown> }).json()) as
+      | { code?: unknown; detail?: unknown }
+      | null;
+    return {
+      code: typeof body?.code === "string" ? body.code : null,
+      detail: typeof body?.detail === "string" && body.detail.trim() ? body.detail.slice(0, 160) : null,
+    };
+  } catch {
+    return { code: null, detail: null };
+  }
+}
+
+/**
  * Generates a personalized Starting Seed Plan.
  *
  * Security: Never uses a client-side Gemini API key. Instead, it invokes the
@@ -933,6 +965,7 @@ export async function generateTree(
 
   const sb = getSupabase();
   let reason: FallbackReason = "off";
+  let detail: string | undefined;
   if (sb && options.allowAi !== false) {
     reason = "unavailable";
     try {
@@ -958,13 +991,17 @@ export async function generateTree(
           source: "edge-ai",
         };
       }
-      reason = fallbackReason(error, true);
+      const failure = await functionFailure(error);
+      reason = fallbackReason(error, true, failure.code);
+      detail = failure.detail ?? undefined;
     } catch (caught) {
       // Edge function not deployed or unreachable — fall through to Starting Seed Engine.
-      reason = fallbackReason(caught, true);
+      const failure = await functionFailure(caught);
+      reason = fallbackReason(caught, true, failure.code);
+      detail = failure.detail ?? undefined;
     }
   }
 
   await new Promise((resolve) => setTimeout(resolve, 450));
-  return { tree: buildSeedPlan(answers), source: "seed-engine", reason };
+  return { tree: buildSeedPlan(answers), source: "seed-engine", reason, detail };
 }
