@@ -21,6 +21,12 @@ const CORS_HEADERS = {
 const MAX_BODY_BYTES = 8192;
 const DAILY_LIMIT = 20;
 const TIMEOUT_MS = 15_000;
+/**
+ * Writing sixteen practices is a long generation. Fifteen seconds aborted a
+ * healthy request on a reasoning model, which the app then reported as a
+ * failure; the auth and REST calls keep the short budget above.
+ */
+const MODEL_TIMEOUT_MS = 60_000;
 
 /**
  * Model names, newest usable first.
@@ -315,6 +321,17 @@ function validateTree(raw: unknown, budget: number): string | null {
   return null;
 }
 
+/** What a thrown fetch actually was: an abort, or the network. */
+function describeFetchError(error: unknown) {
+  const name = (error as { name?: string } | null)?.name ?? "";
+  if (name === "TimeoutError" || name === "AbortError") {
+    return `timed out after ${Math.round(MODEL_TIMEOUT_MS / 1000)}s`;
+  }
+  const message = (error as { message?: string } | null)?.message ?? "";
+  const cleaned = message.replace(/key=[^&\s"]+/gi, "key=***").replace(/\s+/g, " ").trim();
+  return `network: ${cleaned.slice(0, 120) || "the request failed"}`;
+}
+
 /** A failure worth reading: the status, and the provider's own short message. */
 function upstreamMessage(status: number, body: string) {
   let message = "";
@@ -342,15 +359,20 @@ async function callModel(
   model: string,
 ): Promise<{ tree: unknown } | { failure: string }> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.6, responseMimeType: "application/json" },
-    }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.6, responseMimeType: "application/json" },
+      }),
+      signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
+    });
+  } catch (error) {
+    return { failure: describeFetchError(error) };
+  }
   if (!res.ok) return { failure: upstreamMessage(res.status, await res.text().catch(() => "")) };
   const data = await res.json().catch(() => null);
   const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
@@ -469,25 +491,35 @@ Deno.serve(async (req: Request) => {
   // instead of becoming "the AI could not be reached" for every cause.
   let lastFailure = "";
   let lastProblem = "";
+  const startedAt = Date.now();
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    // The function has a wall clock of its own. A second long attempt would be
+    // killed by it, which looks like a crash instead of a slow model.
+    if (attempt > 0 && Date.now() - startedAt > 90_000) break;
     let tree: unknown = null;
     const attemptPrompt = correction ? `${prompt}\n\nCORRECTION FOR THIS ATTEMPT\n${correction}` : prompt;
     try {
       const result = await callWithFallback(attemptPrompt, apiKey, models);
       if ("tree" in result) tree = result.tree;
       else lastFailure = result.failure;
-    } catch {
-      lastFailure = "the request to the model failed";
+    } catch (error) {
+      lastFailure = describeFetchError(error);
     }
     if (!tree) {
       console.warn("generate-tree", JSON.stringify({ attempt, model, verdict: lastFailure || "no draft" }));
+      // A timeout or a dropped connection will not be different on a second try,
+      // and two of them would outlast the function's own wall clock.
+      if (/^(timed out|network:)/.test(lastFailure)) break;
     }
     if (tree) {
       sawDraft = true;
       const problem = validateTree(tree, budget);
       // One line per attempt. This is how "did the model actually run?" gets
       // answered from the function logs, without logging the person's goal.
-      console.log("generate-tree", JSON.stringify({ attempt, model, verdict: problem ?? "ok" }));
+      console.log(
+        "generate-tree",
+        JSON.stringify({ attempt, model, ms: Date.now() - startedAt, verdict: problem ?? "ok" }),
+      );
       if (!problem) return respond(tree, 200);
       lastProblem = problem;
       console.error("Rejected model output", { problem });
