@@ -1,30 +1,107 @@
-import type { DailyPlan, DailySnapshot } from "./daily-types";
-import type { GeneratedTree, OnboardingAnswers, PillarId, Profile, TreeNode } from "./types";
+import type { DailyPlan, DailySnapshot, PracticeDraft } from "./daily-types";
+import type { GeneratedNode, GeneratedTree, OnboardingAnswers, PillarId, Profile, TreeNode } from "./types";
+import { PILLARS } from "./pillars";
 import { PROGRESSION } from "./progression";
-import { buildPlan, detectTheme } from "./plans";
+import { buildPlan, detectTheme, validatePlan, MAX_VARIANT_STEPS, type Budget } from "./plans";
 import type { TreeSource } from "./gemini";
 
 /**
- * A generated tree may supply the narrative, but the daily plan always comes from
- * the curated library so every practice has a bounded full and easy version.
+ * The plan is built from the tree's own words.
+ *
+ * A generated tree carries one seed node per branch, written for this person's
+ * goal. Those nodes become the four practices, so the steps on the Today screen
+ * are the ones the model wrote for this goal rather than a shared template. The
+ * curated library is still the safety net: it supplies any branch the tree did
+ * not cover, and the whole plan if the result would not survive the server's
+ * validation.
  */
-export function dailyPlanFromTree(answers: OnboardingAnswers, tree: GeneratedTree, source: TreeSource): DailyPlan {
-  const budget = Number(answers.timeBudget);
+
+function budgetOf(answers: OnboardingAnswers): Budget {
+  const value = Number(answers.timeBudget);
+  return value === 5 || value === 30 ? value : 15;
+}
+
+/** Minutes named on a node, kept inside the chosen budget. */
+function nodeMinutes(duration: string, budget: Budget) {
+  const found = Number(duration.match(/(\d+)/)?.[1] ?? 0);
+  if (!Number.isFinite(found) || found < 1) return budget;
+  return Math.min(found, budget);
+}
+
+function practiceFromNode(
+  node: GeneratedNode,
+  branch: PillarId,
+  role: PracticeDraft["role"],
+  budget: Budget,
+): PracticeDraft | null {
+  const title = node.title.trim().slice(0, 80);
+  const why = node.description.trim().slice(0, 280);
+  const steps = node.instructions
+    .map((step) => step.trim())
+    .filter(Boolean)
+    .slice(0, MAX_VARIANT_STEPS);
+  if (!title || !why || steps.length === 0) return null;
+
+  return {
+    branch,
+    title,
+    why,
+    role,
+    cadence: role === "primary" ? "daily" : "weekly",
+    cadence_n: 1,
+    full_variant: { title, minutes: nodeMinutes(node.duration, budget), steps },
+    easy_variant: {
+      title: "The two-minute version",
+      minutes: 2,
+      steps: [steps[0], "Stop there — a day that small is a complete day."],
+    },
+  };
+}
+
+export function dailyPlanFromTree(
+  answers: OnboardingAnswers,
+  tree: GeneratedTree,
+  source: TreeSource,
+): DailyPlan {
+  const budget = budgetOf(answers);
+  const theme = detectTheme(answers.goal);
+  const mainBranch = theme.primary.branch;
+
+  // The curated plan is both the base for narrative fields and the fallback.
   const base = buildPlan({
     goal: answers.goal,
     identity: answers.identity,
     blocker: answers.blocker,
-    minutes_budget: budget === 5 || budget === 30 ? budget : 15,
+    minutes_budget: budget,
     plan_source: source === "edge-ai" ? "ai" : "local",
     plan_summary: tree.summary,
     safety_note: tree.safetyNote,
-    theme: detectTheme(answers.goal),
+    theme,
   });
+
   const labels = { ...base.branch_labels };
   for (const pillar of tree.pillars) {
     if (pillar.focus) labels[pillar.pillar] = pillar.focus.slice(0, 60);
   }
-  return { ...base, branch_labels: labels };
+
+  const practices = PILLARS.map((pillar) => {
+    const role: PracticeDraft["role"] = pillar.id === mainBranch ? "primary" : "supporting";
+    const node = tree.pillars.find((entry) => entry.pillar === pillar.id)?.nodes?.[0];
+    const built = node ? practiceFromNode(node, pillar.id, role, budget) : null;
+    return built ?? base.practices.find((practice) => practice.branch === pillar.id);
+  }).filter((practice): practice is PracticeDraft => Boolean(practice));
+
+  // Roles are assigned by branch so a fallback practice cannot create a second
+  // daily obligation or leave the plan without one.
+  const normalised = practices.map((practice) => ({
+    ...practice,
+    role: practice.branch === mainBranch ? ("primary" as const) : ("supporting" as const),
+    cadence: practice.branch === mainBranch ? ("daily" as const) : ("weekly" as const),
+    cadence_n: 1,
+  }));
+
+  const candidate: DailyPlan = { ...base, branch_labels: labels, practices: normalised };
+  return validatePlan(candidate).length ? { ...base, branch_labels: labels } : candidate;
 }
 
 export function presentation(snapshot: DailySnapshot): { profile: Profile | null; nodes: TreeNode[] } {

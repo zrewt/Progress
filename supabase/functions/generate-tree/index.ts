@@ -77,7 +77,9 @@ Return exactly:
 Rules:
 - Exactly 4 pillars: body, mind, craft, connection, in that order, 4 nodes each.
 - Each node's duration must not exceed ${p.timeBudget} minutes.
-- Steps are concrete actions of at most 18 words. Never state a time longer than the budget.
+- The FIRST node of each pillar becomes the person's daily practice, so write it as something they can do again tomorrow, not a one-time setup task. Name their actual subject (their project, their instrument, their subject, their person) rather than describing the category.
+- The first instruction of every node must be doable in two minutes on its own; it is offered back to them as the easier version of the practice.
+- Steps are concrete actions of at most 18 words. Never state a time longer than the budget. No step may begin with "consider", "think about", "reflect on" or "explore" — every step names a physical or on-screen action.
 - No calorie numbers, weight targets, fasting, sleep restriction, substances, or medical advice.
 - No shaming, no "discipline", no "no excuses".`;
 }
