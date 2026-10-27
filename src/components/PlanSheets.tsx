@@ -128,7 +128,7 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
 }
 
 export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { today, snapshot, finishSeason, authBusy } = useGame();
+  const { today, snapshot, finishSeason, submitOnboarding, authBusy } = useGame();
   const [newGoalOpen, setNewGoalOpen] = useState(false);
   const [goal, setGoal] = useState("");
   const [budget, setBudget] = useState<Budget>(15);
@@ -152,16 +152,14 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
   async function beginNew() {
     if (!plan) return;
     setBusy(true);
-    await finishSeason(
-      buildPlan({
-        goal,
-        identity: plan.identity,
-        blocker: plan.blocker,
-        minutes_budget: budget,
-        plan_source: "local",
-        plan_version: 1,
-      }),
-    );
+    // Through the generator, so the new season is written for the new goal rather
+    // than rebuilt from the shared library. Starting a season archives the old one.
+    await submitOnboarding({
+      identity: plan.identity,
+      goal: goal.trim(),
+      blocker: plan.blocker,
+      timeBudget: String(budget),
+    });
     setBusy(false);
     onClose();
   }
