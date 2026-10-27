@@ -26,7 +26,7 @@ const TIMEOUT_MS = 15_000;
  * healthy request on a reasoning model, which the app then reported as a
  * failure; the auth and REST calls keep the short budget above.
  */
-const MODEL_TIMEOUT_MS = 60_000;
+const MODEL_TIMEOUT_MS = 75_000;
 
 /**
  * Model names, newest usable first.
@@ -359,33 +359,49 @@ async function callModel(
   model: string,
 ): Promise<{ tree: unknown } | { failure: string }> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  let res: Response;
-  try {
-    res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.6, responseMimeType: "application/json" },
-      }),
-      signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
-    });
-  } catch (error) {
-    return { failure: describeFetchError(error) };
+  // Gemini 3 models think hard by default, and this request is a long structured
+  // answer rather than a hard reasoning problem: high thinking alone can outlast
+  // a minute. "low" is the documented way to ask for the shorter path. The
+  // second pass exists for a provider that rejects the field outright, so an
+  // unknown option can never cost the person their plan.
+  for (const useThinkingConfig of [true, false]) {
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.6,
+            responseMimeType: "application/json",
+            ...(useThinkingConfig ? { thinkingConfig: { thinkingLevel: "low" } } : {}),
+          },
+        }),
+        signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
+      });
+    } catch (error) {
+      return { failure: describeFetchError(error) };
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      if (useThinkingConfig && res.status === 400 && /thinking/i.test(body)) continue;
+      return { failure: upstreamMessage(res.status, body) };
+    }
+    const data = await res.json().catch(() => null);
+    const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    if (!text) {
+      const blocked = data?.promptFeedback?.blockReason;
+      return { failure: blocked ? `blocked: ${blocked}` : "empty response" };
+    }
+    const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    try {
+      return { tree: JSON.parse(cleaned) };
+    } catch {
+      return { failure: "the reply was not valid JSON" };
+    }
   }
-  if (!res.ok) return { failure: upstreamMessage(res.status, await res.text().catch(() => "")) };
-  const data = await res.json().catch(() => null);
-  const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  if (!text) {
-    const blocked = data?.promptFeedback?.blockReason;
-    return { failure: blocked ? `blocked: ${blocked}` : "empty response" };
-  }
-  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  try {
-    return { tree: JSON.parse(cleaned) };
-  } catch {
-    return { failure: "the reply was not valid JSON" };
-  }
+  return { failure: "the request was rejected" };
 }
 
 /**
@@ -495,7 +511,7 @@ Deno.serve(async (req: Request) => {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     // The function has a wall clock of its own. A second long attempt would be
     // killed by it, which looks like a crash instead of a slow model.
-    if (attempt > 0 && Date.now() - startedAt > 90_000) break;
+    if (attempt > 0 && Date.now() - startedAt > 60_000) break;
     let tree: unknown = null;
     const attemptPrompt = correction ? `${prompt}\n\nCORRECTION FOR THIS ATTEMPT\n${correction}` : prompt;
     try {

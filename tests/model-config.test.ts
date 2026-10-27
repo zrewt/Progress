@@ -12,6 +12,9 @@ test("the plan function asks for a model that exists for new projects", async ()
   const source = await readFile("supabase/functions/generate-tree/index.ts", "utf8");
   assert.match(source, /MODEL_FALLBACKS\s*=\s*\["gemini-3\.8-flash"/);
   assert.doesNotMatch(source, /["'`]gemini-2\.5-flash["'`]/);
+  // Gemini 3 thinks hard by default, which outlasts a planning screen; the
+  // shorter path is what keeps a sixteen-practice answer inside the budget.
+  assert.match(source, /thinkingConfig:\s*\{\s*thinkingLevel:\s*"low"\s*\}/);
 });
 
 test("the release checklist does not tell the next person to use a retired model", async () => {
