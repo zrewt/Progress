@@ -280,7 +280,8 @@ export function SkillTree({
 
                 return (
                   <Pressable
-                    key={node.id}
+                    // Four tiers share one practice id, so the tier is what makes a node unique.
+                    key={`${node.id}-${node.tier}`}
                     disabled={locked}
                     onPress={() => onSelect(node)}
                     accessibilityRole="button"
@@ -429,7 +430,7 @@ export function SkillTree({
 
               return (
                 <Pressable
-                  key={node.id}
+                  key={`${node.id}-${node.tier}`}
                   disabled={locked}
                   onPress={() => onSelect(node)}
                   accessibilityRole="button"

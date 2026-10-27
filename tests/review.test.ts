@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { adherenceFor, alignedWeeks, nextReviewWeek, reviewDecision, weekLabel } from "../src/lib/review";
 import { todayState, isSupportingDue } from "../src/lib/today";
+import { presentation } from "../src/lib/daily-adapter";
 import type { CompletionEvent, DailySnapshot, Practice, Season } from "../src/lib/daily-types";
 
 const season = {
@@ -119,4 +120,30 @@ test("a weekly support is due only once per week", () => {
 
 test("an empty journal has no Today rather than an invented one", () => {
   assert.equal(todayState({ ...snapshot(), seasons: [], practices: [] }), null);
+});
+
+// The tree draws sixteen nodes from four practices: each practice backs one
+// milestone per tier, so practice id alone is not a unique identity.
+test("every tree node can be told apart from the others", () => {
+  const branches = ["body", "mind", "craft", "connection"] as const;
+  const practices = branches.map((branch, index) =>
+    practice(`p${index}`, index === 0 ? "primary" : "supporting", branch, index === 0 ? "daily" : "weekly"),
+  );
+  const milestones = branches.flatMap((branch, index) =>
+    [1, 2, 3, 4].map((tier) => ({
+      id: `m-${index}-${tier}`,
+      season_id: season.id,
+      user_id: season.user_id,
+      branch,
+      tier,
+      title: `Tier ${tier}`,
+      practice_id: `p${index}`,
+      required_days: tier * 3,
+      unlocked_at: null,
+    })),
+  );
+  const view = presentation(snapshot({ practices, milestones }));
+  assert.equal(view.nodes.length, 16);
+  const keys = view.nodes.map((node) => `${node.id}-${node.tier}`);
+  assert.equal(new Set(keys).size, 16, "tree node keys must be unique");
 });
