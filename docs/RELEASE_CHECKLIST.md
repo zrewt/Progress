@@ -6,14 +6,16 @@ needs a human decision, and a backup before any migration runs.
 ## 1. Database (approval required)
 
 For a project that has applied none of the new schema, paste
-`supabase/apply_all_stages.sql` into the SQL editor once. It is all eight files below, merged
+`supabase/apply_all_stages.sql` into the SQL editor once. It is all nine files below, merged
 in filename order, wrapped in a single transaction — apply it as one unit and do not split it.
 On a project that has already applied some migrations, do **not** run the whole bundle: the
 first "already exists" aborts the transaction, so apply only the newer files, in order. For the
 common case (the old four-file setup plus personalization is already applied),
-`supabase/apply_remaining.sql` is that single paste: migrations 6–8 in one transaction. Its
-header carries a read-only query that reports which of the three parts are still missing;
+`supabase/apply_remaining.sql` is that single paste: migrations 6–9 in one transaction. Its
+header carries a read-only query that reports which of the four parts are still missing;
 all zero means run it, and anything already present means run only the file that is missing.
+If migrations 6–8 are already live, run only `202610280002_budgets_and_questions.sql`;
+running the bundle will abort safely at the first duplicate.
 
 1. `202610250001_daily_loop.sql` — seasons, practices, milestones, events, legacy grants, RPCs.
 2. `202610250002_backfill.sql` — converts existing profiles/nodes into a first season; preserves XP as a one-time grant and marks inferred dates.
@@ -23,6 +25,7 @@ all zero means run it, and anything already present means run only the file that
 6. `202610270001_target_dates.sql` — target date, leg length, scaled stages and milestones, accepted weekly detail.
 7. `202610270002_safety.sql` — age bracket, conservative mode, goal category, pain handling, signup age trigger.
 8. `202610280001_midweek_adaptation.sql` — owner-only `set_lighter_week` used by the mid-week offer.
+9. `202610280002_budgets_and_questions.sql` — 45/60-minute budgets and up to five personalization answers, replacing the previous validators and constraint in place.
 
 Both bundles are generated from the migration files, so neither must be edited by hand.
 `tests/sql-bundle.test.mjs` fails when either drifts (a missing, duplicated or reordered

@@ -34,6 +34,37 @@ export function validateWeeklyDraft(raw: unknown, current: { id: string; minutes
   });
 }
 
+/** The optional two-minute version, at branch or node level. */
+export function validEasyVersion(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const easy = raw as { title?: unknown; steps?: unknown };
+  if (typeof easy.title !== "string" || easy.title.trim().length < 3 || easy.title.length > 70) return false;
+  if (!Array.isArray(easy.steps) || easy.steps.length < 1 || easy.steps.length > 3) return false;
+  if (easy.steps.some((step) => typeof step !== "string" || !step.trim() || step.length > 180)) return false;
+  return validatePracticeText(`${easy.title} ${easy.steps.join(" ")}`).ok && validateStepsWithinBudget(easy.steps as string[], 2).ok;
+}
+
+/**
+ * A two-minute version is a bonus, not the plan. If the model writes one that is
+ * unsafe or malformed, remove it and let the client derive one from the first
+ * step; never reject every practice because of it. Missing is allowed.
+ */
+export function dropInvalidEasyVersions(raw: unknown): void {
+  const pillars = (raw as { pillars?: unknown } | null)?.pillars;
+  if (!Array.isArray(pillars)) return;
+  for (const pillar of pillars) {
+    if (!pillar || typeof pillar !== "object") continue;
+    const entry = pillar as { easy?: unknown; nodes?: unknown };
+    if ("easy" in entry && !validEasyVersion(entry.easy)) delete entry.easy;
+    if (!Array.isArray(entry.nodes)) continue;
+    for (const node of entry.nodes) {
+      if (!node || typeof node !== "object") continue;
+      const practice = node as { easy?: unknown };
+      if ("easy" in practice && !validEasyVersion(practice.easy)) delete practice.easy;
+    }
+  }
+}
+
 export interface Stage { start: string; end: string; title: string; outcome: string }
 
 export function stageCount(length: number): number {

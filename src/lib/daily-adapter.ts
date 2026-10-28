@@ -3,7 +3,7 @@ import type { GeneratedEasy, GeneratedNode, GeneratedTree, OnboardingAnswers, Pi
 import { classifyGoal } from "./safety-rules";
 import { PILLARS } from "./pillars";
 import { PROGRESSION } from "./progression";
-import { buildPlan, detectTheme, validatePlan, validatePractice, MAX_VARIANT_STEPS, type Budget } from "./plans";
+import { BUDGETS, buildPlan, detectTheme, validatePlan, validatePractice, MAX_VARIANT_STEPS, type Budget } from "./plans";
 import { rungFor } from "./engine/week";
 import type { TreeSource } from "./gemini";
 
@@ -23,7 +23,7 @@ import type { TreeSource } from "./gemini";
 
 function budgetOf(answers: OnboardingAnswers): Budget {
   const value = Number(answers.timeBudget);
-  return value === 5 || value === 30 ? value : 15;
+  return (BUDGETS as readonly number[]).includes(value) ? (value as Budget) : 15;
 }
 
 /** Minutes named on a node, kept inside the chosen budget. */

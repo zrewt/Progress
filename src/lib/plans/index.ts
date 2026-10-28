@@ -28,7 +28,10 @@ export const THEME_MAP = Object.fromEntries(
   THEMES.map((theme) => [theme.id, theme]),
 ) as Record<ThemeId, PlanTheme>;
 
-export const BUDGETS = [5, 15, 30] as const;
+// Longer sessions are allowed because some goals (a long ride, a full lesson,
+// a deep work block) do not fit in half an hour. Keep this list in step with
+// the database check, the Edge Function allow-list and TIME_OPTIONS.
+export const BUDGETS = [5, 15, 30, 45, 60] as const;
 export type Budget = (typeof BUDGETS)[number];
 
 /**

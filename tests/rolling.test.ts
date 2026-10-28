@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { durationCap, normaliseStages, stageRanges as serverStageRanges, validateWeeklyDraft, validRealityCheck } from "../supabase/functions/generate-tree/plan-validation";
+import { dropInvalidEasyVersions, durationCap, normaliseStages, stageRanges as serverStageRanges, validateWeeklyDraft, validEasyVersion, validRealityCheck } from "../supabase/functions/generate-tree/plan-validation";
 import { checkpointWeek, detailFor, localWeeklyAlternative } from "../src/lib/engine/rolling";
 import { planWeek } from "../src/lib/engine/week";
 import { nextReviewWeek, adherenceFor } from "../src/lib/review";
@@ -76,6 +76,28 @@ test("stage dates are the server's, so a model date or count cannot reject the p
   for (const span of [14, 15, 28, 29, 56, 57, 112]) {
     assert.deepEqual(serverStageRanges(start, span), stageRanges(start, span));
   }
+});
+
+test("an unusable two-minute version is dropped instead of rejecting the plan", () => {
+  const tree: { pillars: { easy?: unknown; nodes: { easy?: unknown }[] }[] } = {
+    pillars: [
+      {
+        easy: { title: "Eat 900 calories", steps: ["Skip meals until dinner."] },
+        nodes: [
+          { easy: { title: "Open the notebook", steps: ["Write one sentence."] } },
+          { easy: { title: "x", steps: [] } },
+          {},
+        ],
+      },
+    ],
+  };
+  dropInvalidEasyVersions(tree);
+  // A valid one survives; unsafe, empty and missing ones do not stop the plan.
+  assert.equal(validEasyVersion(tree.pillars[0].nodes[0].easy), true);
+  assert.deepEqual(tree.pillars[0].nodes[0].easy, { title: "Open the notebook", steps: ["Write one sentence."] });
+  assert.equal(tree.pillars[0].nodes[1].easy, undefined);
+  assert.equal("easy" in tree.pillars[0].nodes[2], false);
+  assert.equal(tree.pillars[0].easy, undefined);
 });
 
 test("the advisory reality check is still constrained", () => {

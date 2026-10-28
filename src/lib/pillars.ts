@@ -192,6 +192,18 @@ export const TIME_OPTIONS = [
     sub: "A deeper practice",
     icon: "hourglass" as const,
   },
+  {
+    label: "45 mins",
+    value: "45",
+    sub: "A focused session",
+    icon: "hourglass" as const,
+  },
+  {
+    label: "60 mins",
+    value: "60",
+    sub: "Deep work or training",
+    icon: "hourglass" as const,
+  },
 ] as const;
 
 export type TimeIcon = (typeof TIME_OPTIONS)[number]["icon"];

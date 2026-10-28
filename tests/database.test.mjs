@@ -158,7 +158,12 @@ test('personalization is saved, owner-scoped and removable without changing plan
  await assert.rejects(()=>rpc(db,'set_personalization_context',[season,[]]));
  await asUser(db);
  await assert.rejects(()=>rpc(db,'set_personalization_context',[season,null]));
- await assert.rejects(()=>rpc(db,'set_personalization_context',[season,Array(4).fill(context[0])]));
+ await assert.rejects(()=>rpc(db,'set_personalization_context',[season,Array(6).fill(context[0])]));
+ // Five answers are now allowed because the prompts may ask that many.
+ const five=Array(5).fill(context[0]);
+ await rpc(db,'set_personalization_context',[season,five]);
+ assert.deepEqual((await db.query('select personalization_context from public.seasons where id=$1',[season])).rows[0].personalization_context,five);
+ await rpc(db,'set_personalization_context',[season,[]]);
  await rpc(db,'update_plan',[season,{...personalized,goal:'Write a daily journal'}]);
  await rpc(db,'set_personalization_context',[season,[]]);
  row=(await db.query('select personalization_context from public.seasons where id=$1',[season])).rows[0];
@@ -171,6 +176,18 @@ test('personalization is saved, owner-scoped and removable without changing plan
  const continuation=await rpc(db,'start_next_season',[{...plan,plan_source:'unknown'},'UTC','Player','completed']);
  const continued=(await db.query('select plan_source,plan_source_verified from public.seasons where id=$1',[continuation])).rows[0];
  assert.equal(continued.plan_source,'unknown'); assert.equal(continued.plan_source_verified,false);
+});
+
+test('longer daily sessions and five answers are accepted; invalid values are rejected', async(t)=>{
+ const db=await setup(); t.after(()=>db.close()); await asUser(db);
+ const five=Array.from({length:5},(_,i)=>({question:`Question ${i+1}?`,answer:'A short answer'}));
+ const season=await rpc(db,'start_next_season',[{...plan,minutes_budget:60,personalization_context:five},'UTC','Player','archived']);
+ const row=(await db.query('select minutes_budget,jsonb_array_length(personalization_context) n from public.seasons where id=$1',[season])).rows[0];
+ assert.equal(row.minutes_budget,60); assert.equal(row.n,5);
+ await assert.rejects(()=>rpc(db,'start_next_season',[{...plan,minutes_budget:31},'UTC','Player','archived']));
+ await assert.rejects(()=>rpc(db,'start_next_season',[{...plan,minutes_budget:60,personalization_context:Array(6).fill(five[0])},'UTC','Player','archived']));
+ await assert.rejects(()=>rpc(db,'set_personalization_context',[season,Array(6).fill(five[0])]));
+ await asUser(db,B); await assert.rejects(()=>rpc(db,'set_personalization_context',[season,five])); await asUser(db);
 });
 
 test('weekly review, plan edits and replacement keep history intact', async(t)=>{

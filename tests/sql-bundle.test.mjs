@@ -82,6 +82,7 @@ test('the remaining file contains only the migrations an existing project lacks'
     '202610270001_target_dates.sql',
     '202610270002_safety.sql',
     '202610280001_midweek_adaptation.sql',
+    '202610280002_budgets_and_questions.sql',
   ], 'the assumption this file is built on has changed; rebuild it');
   await assertCovers(REMAINING, outstanding);
 });
@@ -116,6 +117,7 @@ test('the full setup applies to an empty project, then refuses a second run', as
     assert.ok(tables.has(table), `missing table ${table}`);
   }
   assert.equal((await db.query("select 1 from pg_trigger where tgname='check_signup_age'")).rows.length, 1, 'signup age guard is created');
+  assert.match((await db.query("select pg_get_constraintdef(oid) def from pg_constraint where conname='seasons_minutes_budget_check'")).rows[0].def, /60/);
   assert.equal((await db.query('select count(*)::int n from public.seasons')).rows[0].n, 0, 'no season is invented for an empty project');
 
   // A second run must abort rather than half-apply anything.
@@ -148,6 +150,7 @@ test('the remaining file applies on top of the already-migrated schema', async (
   assert.ok(await hasFunction(db, 'record_pain'));
   assert.equal((await db.query("select 1 from pg_tables where schemaname='public' and tablename='practice_weeks'")).rows.length, 1);
   assert.equal((await db.query("select 1 from pg_trigger where tgname='check_signup_age'")).rows.length, 1);
+  assert.match((await db.query("select pg_get_constraintdef(oid) def from pg_constraint where conname='seasons_minutes_budget_check'")).rows[0].def, /60/);
 
   // Running it again is refused, and the first application survives.
   await assert.rejects(() => db.exec(remaining));

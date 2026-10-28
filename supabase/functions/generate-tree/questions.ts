@@ -14,7 +14,10 @@ const SENSITIVE_QUESTION = /\b(diagnos\w*|medic(?:al|ation|ine)\w*|symptom\w*|di
 export function validateQuestions(raw: unknown): PersonalizationQuestion[] | null {
   if (!raw || typeof raw !== "object") return null;
   const questions = (raw as { questions?: unknown }).questions;
-  if (!Array.isArray(questions) || questions.length < 1 || questions.length > 3) return null;
+  // Five is the ceiling everywhere: this validator, the Edge context slice and
+  // the database's context check. Raising it in one place alone would make a
+  // valid answer set fail to save.
+  if (!Array.isArray(questions) || questions.length < 1 || questions.length > 5) return null;
   const result: PersonalizationQuestion[] = [];
   for (const item of questions) {
     if (!item || typeof item !== "object") return null;
@@ -37,4 +40,6 @@ export const GENERAL_QUESTIONS: PersonalizationQuestion[] = [
   { question: "Where are you starting with this goal?", options: ["Just starting", "Some experience", "Already working on it"] },
   { question: "What would help you most right now?", options: ["Know what to do first", "Practice a skill", "Finish something I started"] },
   { question: "What resources can you use?", options: ["Only what I already have", "I have some tools or support", "I am not sure yet"] },
+  { question: "What makes this easier to keep up?", options: ["A set time each day", "A shorter version on busy days", "Someone to check in with"] },
+  { question: "How do you like to work?", options: ["Follow a clear plan", "Try things and adjust", "Work alongside someone"] },
 ];

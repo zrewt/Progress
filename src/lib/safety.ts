@@ -44,9 +44,9 @@ export function assessGoalSafety(rawGoal: string): GoalSafetyAssessment {
 export { CRISIS_RESOURCES };
 
 function maxMinutesForBudget(budget: string) {
-  if (budget === "5") return 5;
-  if (budget === "15") return 15;
-  return 30;
+  const minutes = Number(budget);
+  // Unknown or legacy values keep the old ceiling rather than opening it up.
+  return minutes === 5 || minutes === 15 || minutes === 30 || minutes === 45 || minutes === 60 ? minutes : 30;
 }
 
 export function clampDurationToBudget(duration: string, tier: number, budget: string): string {

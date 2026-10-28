@@ -27,7 +27,7 @@ export interface DailyPlan {
   goal: string;
   identity: IdentityId;
   blocker: BlockerId;
-  minutes_budget: 5 | 15 | 30;
+  minutes_budget: 5 | 15 | 30 | 45 | 60;
   plan_version: number;
   plan_source: "ai" | "local" | "mixed" | "unknown";
   personalization_context?: PersonalizationAnswer[];

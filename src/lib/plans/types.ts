@@ -2,8 +2,8 @@ import type { PillarId } from "../types";
 
 /**
  * A practice template. Steps never prescribe a duration, so the same practice
- * can be offered at 5, 15 or 30 minutes without any step exceeding the budget.
- * `deep` steps are appended for the 15 and 30 minute variants.
+ * can be offered at any supported budget without any step exceeding it.
+ * `deep` steps are appended for the longer variants (15 minutes and above).
  */
 export interface ThemePractice {
   key: string;

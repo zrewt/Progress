@@ -1,5 +1,13 @@
 # Implementation decisions
 
+## Follow-up: weekly easy version, longer sessions, more questions
+
+- The weekly AI draft was rejected with "bad weekly easy version" when any node's two-minute version was unsafe or malformed. That check is gone. `dropInvalidEasyVersions` deletes an unusable node or branch easy version before validation, and the client derives one from the first step (as it already did when the model omitted it). A plan is never lost over a bonus field. Tested in `tests/rolling.test.ts`.
+- Daily budgets are now 5, 15, 30, 45 and 60 minutes. The same list is used by `BUDGETS`, `TIME_OPTIONS`, the duration clamp, the Edge allow-list and the database constraint/validator; the 30-minute fallback remains for unknown legacy values. Existing 5/15/30 plans are untouched and still valid. `202610280002_budgets_and_questions.sql` replaces the constraint and the two validator functions in place; it is a NEW migration and was not applied here.
+- Personalization now accepts up to five questions and answers: the model prompt asks for three to five, `validateQuestions` accepts 1–5, the Edge Function forwards 5, the database wrapper and `set_personalization_context` accept 5, and `GENERAL_QUESTIONS` has 5. The consent copy already says "a few", so no new category of data is disclosed, but more answers may be sent once consent is given.
+- Both database changes live in one new migration. `apply_all_stages.sql` now includes it (nine files) and `apply_remaining.sql` covers migrations 6–9. An existing project that already ran 6–8 must run only the new migration; the bundle aborts safely at the first duplicate. Tests cover both bundles and the new PGlite constraints/validators.
+- Not verified: the live Edge Function and Supabase database. The function must be redeployed and the migration applied before these limits take effect in production.
+
 ## Target-date change: who owns the stage dates
 
 - A live attempt returned a good draft and was rejected with `invalid stage outline`, then the starter library was used. The validator demanded the model reproduce exact contiguous dates, which is arithmetic the app already knows how to do. The model now writes only stage titles and outcomes; `normaliseStages` places them on the canonical ranges for the leg. A wrong date, an inclusive end or one stage too many or too few no longer costs the person their AI plan.
