@@ -13,7 +13,7 @@ import {
   validateStepsWithinBudget,
 } from "./safety-rules.ts";
 import { validateQuestions } from "./questions.ts";
-import { dropInvalidEasyVersions, durationCap, normaliseStages, stageRanges, validRealityCheck, validateWeeklyDraft } from "./plan-validation.ts";
+import { dropInvalidEasyVersions, durationCap, normaliseFocusLabels, normaliseStages, stageRanges, validRealityCheck, validateWeeklyDraft } from "./plan-validation.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -276,7 +276,6 @@ export function validateTree(raw: unknown, budget: number, length?: number): str
   for (const [index, rawPillar] of tree.pillars.entries()) {
     const pillar = rawPillar as { pillar?: unknown; focus?: unknown; nodes?: unknown; easy?: unknown };
     if (pillar?.pillar !== order[index]) return "wrong pillar order";
-    if (typeof pillar.focus !== "string" || pillar.focus.length > 48) return "bad focus";
     if (!Array.isArray(pillar.nodes) || pillar.nodes.length !== (length ? 2 : 4)) return "wrong node count";
     // The two-minute version is optional and is cleaned up before this check
     // (dropInvalidEasyVersions). A missing or unusable one never costs the
@@ -610,6 +609,8 @@ Deno.serve(async (req: Request) => {
       }
       // An unsafe or malformed two-minute version is dropped, not fatal.
       dropInvalidEasyVersions(tree);
+      // A display-only branch label is trimmed, never a reason to reject the plan.
+      normaliseFocusLabels(tree);
       const problem = outputSafe(tree) ? validateTree(tree, budget, body.targetDate ? daysRemaining : undefined) : "unsafe category advice";
       // One line per attempt. This is how "did the model actually run?" gets
       // answered from the function logs, without logging the person's goal.

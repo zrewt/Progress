@@ -45,6 +45,32 @@ export function validEasyVersion(raw: unknown): boolean {
 }
 
 /**
+ * A branch focus is a short display label, not a practice. A longer one used to
+ * reject the whole plan with "bad focus"; trim it at a word boundary instead so
+ * a display detail can never cost the person their plan.
+ */
+export function normaliseFocusLabels(raw: unknown): void {
+  const pillars = (raw as { pillars?: unknown } | null)?.pillars;
+  if (!Array.isArray(pillars)) return;
+  for (const pillar of pillars) {
+    if (!pillar || typeof pillar !== "object") continue;
+    const entry = pillar as { focus?: unknown };
+    if (typeof entry.focus !== "string") {
+      delete entry.focus;
+      continue;
+    }
+    const text = entry.focus.trim().replace(/\s+/g, " ");
+    if (!text) {
+      delete entry.focus;
+      continue;
+    }
+    const cut = text.slice(0, 48);
+    const lastSpace = cut.lastIndexOf(" ");
+    entry.focus = (lastSpace >= 24 ? cut.slice(0, lastSpace) : cut).trim();
+  }
+}
+
+/**
  * A two-minute version is a bonus, not the plan. If the model writes one that is
  * unsafe or malformed, remove it and let the client derive one from the first
  * step; never reject every practice because of it. Missing is allowed.

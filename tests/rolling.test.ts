@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dropInvalidEasyVersions, durationCap, normaliseStages, stageRanges as serverStageRanges, validateWeeklyDraft, validEasyVersion, validRealityCheck } from "../supabase/functions/generate-tree/plan-validation";
+import { dropInvalidEasyVersions, durationCap, normaliseFocusLabels, normaliseStages, stageRanges as serverStageRanges, validateWeeklyDraft, validEasyVersion, validRealityCheck } from "../supabase/functions/generate-tree/plan-validation";
 import { checkpointWeek, detailFor, localWeeklyAlternative } from "../src/lib/engine/rolling";
 import { planWeek } from "../src/lib/engine/week";
 import { nextReviewWeek, adherenceFor } from "../src/lib/review";
@@ -98,6 +98,24 @@ test("an unusable two-minute version is dropped instead of rejecting the plan", 
   assert.equal(tree.pillars[0].nodes[1].easy, undefined);
   assert.equal("easy" in tree.pillars[0].nodes[2], false);
   assert.equal(tree.pillars[0].easy, undefined);
+});
+
+test("a long branch focus is shortened, never a reason to reject the plan", () => {
+  const long = "Build a calm daily writing habit that survives a busy week";
+  const tree: { pillars: { focus?: unknown }[] } = {
+    pillars: [{ focus: long }, { focus: "x".repeat(70) }, { focus: 42 }, { focus: "   " }, { focus: "Short label" }],
+  };
+  normaliseFocusLabels(tree);
+
+  const trimmed = tree.pillars[0].focus as string;
+  assert.ok(trimmed.length <= 48 && trimmed.length >= 24);
+  assert.ok(long.startsWith(trimmed));
+  assert.equal(trimmed.endsWith(" "), false);
+  assert.equal((tree.pillars[1].focus as string).length, 48);
+  // Missing or unusable labels are simply absent; the app has a neutral fallback.
+  assert.equal(tree.pillars[2].focus, undefined);
+  assert.equal(tree.pillars[3].focus, undefined);
+  assert.equal(tree.pillars[4].focus, "Short label");
 });
 
 test("the advisory reality check is still constrained", () => {
