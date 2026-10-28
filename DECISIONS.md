@@ -26,6 +26,15 @@
 - The release checklist's migration list was stale (four files) and `apply_all_stages.sql` remains a bundle of only those four. The list now names all eight migrations and marks the bundle stale rather than silently letting a new install skip the target-date and safety schema.
 - TestFlight gaps were read from `eas.json`/`app.json` and listed, not fixed: no project link, no iOS submit credentials, a fixed build number with no auto-increment, no export-compliance answer, and store-side metadata. No build was run.
 
+## Target-date change: Stage 7 retention queries
+
+- The cohort excludes migrated accounts: a backfilled season is one with a `plan_versions` row whose snapshot says `source = migrated`. Those people used the old app, so counting them as new users who did not return would understate every rate.
+- Day numbering is explicit in each file: day 1 is the first season's `started_on`, day 2 is the next calendar day (start + 1), day 7 is start + 6, week 1 is days 1–7 and week 3 is days 15–21. "Return" means a counted practice on that local date, never an app open.
+- Eligibility uses `current_date` in UTC against the local `started_on`, so an account can be excluded for up to one day after its window has ended in its own timezone. Excluding a young account is safer than reporting a false churn.
+- Onboarding completion is labelled a proxy everywhere: the first season created, because the app only calls `start_next_season` after onboarding and an approved preview. A person who abandons onboarding cannot be seen.
+- "Still active in week 3" is a logged practice in days 15–21, not a session. Week 1 is reported both as any counted day and as the average count, because a single day in week 1 and five days in week 1 are different products.
+- The files are not migrations and create nothing. They are plain SELECTs intended for the SQL editor with the owner role; the README states they must not be exposed through an RPC, view or schedule. A test executes all five against the migrated PGlite schema and checks the counts for one backdated account; the fixture writes events with SQL because the RPC correctly refuses events older than its own window, and that write is confined to the in-memory test database.
+
 ## Stage 1
 
 1. Season dates are local calendar dates; ends_on is exclusive (started_on + 30). Events retain their derived local_date permanently. Timezone changes affect new events, not history. UTC is the explicit migration default because the original app never saved a timezone; users can change it later.
