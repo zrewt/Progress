@@ -5,6 +5,7 @@ import { RotateCcw, X } from "lucide-react-native";
 import { useGame } from "../lib/game-context";
 import { daysBetween } from "../lib/progression";
 import { syncMessage } from "../lib/sync-status";
+import { chapterReviewReason } from "../lib/engine/chapter";
 import type { Practice } from "../lib/daily-types";
 import type { TreeNode } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
@@ -17,6 +18,7 @@ import { PracticeSheet } from "./PracticeSheet";
 import { WeekReviewCard } from "./WeekReviewCard";
 import { EditPlanSheet, SeasonHistory, SeasonSummarySheet } from "./PlanSheets";
 import { TopBar } from "./TopBar";
+import { ChapterReview } from "./ChapterReview";
 
 export function Dashboard() {
   const { user, profile, nodes, today, error, clearError, undoOffer, undoEvent, dismissUndo, retryLoad, queueCount, syncState, syncNow } = useGame();
@@ -28,6 +30,8 @@ export function Dashboard() {
   const [easyRequested, setEasyRequested] = useState(false);
   const [editing, setEditing] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [chapterOpen, setChapterOpen] = useState(false);
+  const [chapterDismissed, setChapterDismissed] = useState(false);
 
   if (!profile || !today) return null;
 
@@ -35,6 +39,7 @@ export function Dashboard() {
   const season = today.season;
   const daysLeft = Math.max(0, daysBetween(today.today, season.ends_on));
   const grown = nodes.filter((node) => node.status === "completed").length;
+  const chapterReason = chapterReviewReason(season, today.today, nodes.length, grown);
   const sync = syncMessage(syncState, queueCount);
   const begin = (practice: Practice, options?: { easy?: boolean }) => {
     setEasyRequested(!!options?.easy);
@@ -92,6 +97,13 @@ export function Dashboard() {
             <QuietButton label="Start again, gently" onPress={() => setActive(today.primary)} />
           </View>
         ) : null}
+
+        {chapterReason && !chapterDismissed ? <View style={styles.chapterCard}>
+          <Display style={styles.chapterTitle}>{chapterReason === "ended" ? "Ready to reflect on this chapter?" : "Your tree has grown. Would you like to review what's next?"}</Display>
+          <Text style={styles.chapterCopy}>Look back and choose what comes next. Your current plan stays until you decide.</Text>
+          <QuietButton label="Review this chapter" onPress={() => setChapterOpen(true)} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Review this chapter later" onPress={() => setChapterDismissed(true)} style={styles.chapterLater}><Text style={styles.chapterLaterText}>Not now</Text></Pressable>
+        </View> : null}
 
         <TodayCard onBegin={begin} />
 
@@ -197,6 +209,7 @@ export function Dashboard() {
           onClose={() => { setActive(null); setEasyRequested(false); }}
         />
       ) : null}
+      {chapterOpen ? <ChapterReview onClose={() => setChapterOpen(false)} /> : null}
       {editing ? <EditPlanSheet visible onClose={() => setEditing(false)} /> : null}
       {finishing ? <SeasonSummarySheet visible onClose={() => setFinishing(false)} /> : null}
     </View>
@@ -204,6 +217,11 @@ export function Dashboard() {
 }
 
 const styles = StyleSheet.create({
+  chapterCard: { marginTop: 18, padding: 18, borderRadius: 16, backgroundColor: alpha(colors.copper, 0.12), gap: 10 },
+  chapterTitle: { fontSize: 23, lineHeight: 28 },
+  chapterCopy: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 20, color: colors.sage },
+  chapterLater: { minHeight: 40, alignItems: "center", justifyContent: "center" },
+  chapterLaterText: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.sage },
   errorBanner: {
     marginBottom: 18, borderLeftWidth: 2, borderLeftColor: colors.clay, backgroundColor: alpha(colors.clay, 0.07),
     paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "flex-start", gap: 10,

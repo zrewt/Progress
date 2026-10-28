@@ -14,6 +14,9 @@ export const AI_CONSENT_VERSION = "2026-10-ai-3";
 /** Set to true when the Supabase project requires email confirmation. */
 export const EMAIL_VERIFICATION_REQUIRED = false;
 
+/** Separate permission for sending optional chapter reflections to the AI. */
+export const CHAPTER_REFLECTION_CONSENT_VERSION = "2026-10-chapter-1";
+
 /** Public pages shown in Settings. Both are set in .env; never put a secret here. */
 const PLACEHOLDER_HOST = "https://example.com/";
 export const SUPPORT_URL = process.env.EXPO_PUBLIC_SUPPORT_URL?.trim() || `${PLACEHOLDER_HOST}vitality-tree/support`;
@@ -59,6 +62,7 @@ export const AI_CONSENT_COPY = {
     "Your goal safety category and conservative-mode flag, when relevant; not your age bracket or exercise-screening answer",
     "Practice titles, a short progress summary and review note when available",
     "The current practice, days remaining, completed days, effort and your feedback when you request a weekly change",
+    "With separate permission at a chapter review: what went well, what felt difficult, what to change, and whether the goal still fits",
   ],
   notSent: ["Your account name", "Your account email", "Individual completion notes"],
   detail:

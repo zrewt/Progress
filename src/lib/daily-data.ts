@@ -65,6 +65,8 @@ export class DailyData {
   endSeason(seasonId: string, status: "completed" | "archived") { return this.rpc<null>("end_season", { p_season_id: seasonId, p_status: status }); }
   history() { return this.rpc<SeasonHistoryEntry[]>("season_history", {}); }
   setAgeBracket(bracket: "13_17" | "18_plus") { return this.rpc<null>("set_age_bracket", { p_bracket: bracket }); }
+  approveChapter(previousId: string, expectedVersion: number, plan: DailyPlan, timezone: string, startedOn: string) { return this.rpc<string>("approve_next_chapter", { p_previous_id: previousId, p_expected_version: expectedVersion, p_plan: plan, p_timezone: timezone, p_started_on: startedOn }); }
+  recordChapterConsent(version: string) { return this.rpc<null>("record_chapter_reflection_consent", { p_version: version }); }
   recordConsent(version: string) { return this.rpc<null>("record_ai_consent", { p_version: version }); }
   withdrawConsent() { return this.rpc<null>("withdraw_ai_consent", {}); }
   setTimezone(timezone: string, name?: string | null) { return this.rpc<null>("update_preferences", { p_timezone: timezone, p_display_name: name ?? null }); }

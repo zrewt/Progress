@@ -77,6 +77,37 @@ test('daily database: migrations, backfill, atomic retries, undo, boundaries, ar
  });
 });
 
+test('chapter approval is atomic, owner-scoped, stale-safe, and preserves old growth', async(t)=>{
+ const db=await setup(); t.after(()=>db.close()); await asUser(db);
+ const old=await rpc(db,'start_next_season',[plan,'UTC','Writer','completed']);
+ const pid=(await db.query('select id from public.practices where season_id=$1 order by sort_order limit 1',[old])).rows[0].id;
+ await rpc(db,'complete_practice',[old,pid,'easy',crypto.randomUUID(),new Date().toISOString()]);
+ await db.exec('reset role');
+ for(let i=1;i<=3;i++) await db.query("insert into public.completion_events(user_id,season_id,practice_id,client_event_id,kind,occurred_at,local_date,source) values($1,$2,$3,$4,'easy',now()-($5::int * interval '1 day'),(now() at time zone 'UTC')::date-$5::int,'app')",[A,old,pid,crypto.randomUUID(),i]);
+ await asUser(db);
+ const before=await rpc(db,'get_progress',[old]); assert.ok(before.unlocked_milestones.length>0);
+ const today=(await db.query("select to_char((now() at time zone 'UTC')::date,'YYYY-MM-DD') value")).rows[0].value;
+ const target=(await db.query("select to_char((now() at time zone 'UTC')::date + 28,'YYYY-MM-DD') value")).rows[0].value;
+ const next={...plan,target_date:target,season_length_days:28};
+ await assert.rejects(()=>rpc(db,'approve_next_chapter',[old,2,next,'UTC',today]));
+ await assert.rejects(()=>rpc(db,'approve_next_chapter',[old,1,{...next,goal:'x'},'UTC',today]));
+ assert.equal((await db.query('select status from public.seasons where id=$1',[old])).rows[0].status,'active');
+ await assert.rejects(()=>rpc(db,'approve_next_chapter',[old,1,{...next,plan_source:'ai'},'UTC',today]));
+ await assert.rejects(()=>rpc(db,'record_chapter_reflection_consent',['2026-10-chapter-1']));
+ await rpc(db,'record_ai_consent',['2026-10-ai-3']);
+ await rpc(db,'record_chapter_reflection_consent',['2026-10-chapter-1']);
+ await rpc(db,'withdraw_ai_consent');
+ assert.equal((await db.query('select chapter_reflection_consent_at from public.profiles where id=$1',[A])).rows[0].chapter_reflection_consent_at,null);
+ await assert.rejects(()=>rpc(db,'approve_next_chapter',[old,1,{...next,plan_source:'ai'},'UTC',today]));
+ await asUser(db,B); await assert.rejects(()=>rpc(db,'approve_next_chapter',[old,1,next,'UTC',today])); await asUser(db);
+ const nextId=await rpc(db,'approve_next_chapter',[old,1,next,'UTC',today]);
+ assert.notEqual(nextId,old);
+ assert.equal((await db.query('select previous_season_id from public.seasons where id=$1',[nextId])).rows[0].previous_season_id,old);
+ assert.deepEqual(await rpc(db,'get_progress',[old]),before);
+ await assert.rejects(()=>rpc(db,'approve_next_chapter',[old,1,next,'UTC',today]));
+ assert.equal((await db.query('select count(*)::int n from public.seasons where previous_season_id=$1',[old])).rows[0].n,1);
+});
+
 test('safety: signup trigger rejects missing and under-13 brackets and stores only eligible brackets', async(t)=>{
  const db=await setup(); t.after(()=>db.close());
  for(const metadata of [{},{age_bracket:'under_13'},{age_bracket:'invalid'}]) await assert.rejects(()=>db.query('insert into auth.users(id,raw_user_meta_data) values($1,$2)',[crypto.randomUUID(),metadata]));

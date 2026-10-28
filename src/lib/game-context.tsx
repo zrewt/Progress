@@ -10,7 +10,7 @@ import { AccountScope, DailyData } from "./daily-data";
 import { dailyPlanFromTree, presentation, DAILY_XP } from "./daily-adapter";
 import { todayState, type TodayView } from "./today";
 import { planHistory } from "./engine/history";
-import { AI_CONSENT_VERSION, RESET_REDIRECT } from "./config";
+import { AI_CONSENT_VERSION, CHAPTER_REFLECTION_CONSENT_VERSION, RESET_REDIRECT } from "./config";
 import { parseRecoveryLink } from "./auth-links";
 import { cancelReminders, reminderPermission, rescheduleReminder, saveReminderTime } from "./reminders";
 import { deviceQueue } from "./offline-store";
@@ -46,6 +46,8 @@ interface GameContextValue {
   acceptWeek: (draft: WeeklyDraft) => Promise<boolean>;
   submitReview: (weekStart: string, difficulty: number, note: string | null, apply: boolean) => Promise<string | null>;
   finishSeason: (plan: DailyPlan) => Promise<boolean>;
+  approveChapter: (previousId: string, version: number, plan: DailyPlan, startedOn: string) => Promise<boolean>;
+  recordChapterConsent: () => Promise<boolean>;
   loadHistory: () => Promise<void>;
   recordConsent: () => Promise<boolean>;
   withdrawConsent: () => Promise<boolean>;
@@ -342,6 +344,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (saved) setHistory(null);
     return saved;
   }
+  async function approveChapter(previousId: string, version: number, plan: DailyPlan, startedOn: string) {
+    if (!data || !currentUser.current || loadFailed || loading) return false;
+    const token = scope.token(); setAuthBusy(true);
+    try {
+      await data.approveChapter(previousId, version, plan, snapshot?.profile?.timezone ?? "UTC", startedOn);
+      if (!scope.isCurrent(token)) return false;
+      setHistory(null); await retryLoad(); return true;
+    } catch {
+      if (scope.isCurrent(token)) { await retryLoad(); setError("Your chapter could not be approved. Refresh and review your plan again."); }
+      return false;
+    } finally { if (scope.isCurrent(token)) setAuthBusy(false); }
+  }
+  async function recordChapterConsent() {
+    if (!data || !currentUser.current || !snapshot?.profile?.ai_consent_at) return false;
+    try { await data.recordChapterConsent(CHAPTER_REFLECTION_CONSENT_VERSION); return true; }
+    catch { setError("Your permission could not be saved. Your current plan is unchanged."); return false; }
+  }
   async function loadHistory() {
     if (!data || !currentUser.current || loadFailed) return;
     const token = scope.token();
@@ -436,7 +455,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     aiAllowed: Boolean(snapshot?.profile?.ai_consent_at) && snapshot?.profile?.ai_consent_version === AI_CONSENT_VERSION,
     recovering, reminderSetupPending, setReminderSetupPending, configureReminder, queueCount, syncState, syncNow, setLighterWeek,
     signIn, signUp, setAgeBracket, signOut, retryLoad, submitOnboarding, startSeason, recordEvent, undoEvent, dismissUndo,
-    editPlan, replacePractice, acceptWeek, submitReview, finishSeason, loadHistory, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext,
+    editPlan, replacePractice, acceptWeek, submitReview, finishSeason, approveChapter, recordChapterConsent, loadHistory, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext,
     requestPasswordReset, resendConfirmation, updatePassword, cancelRecovery, deleteAccount, completeNode, dismissCelebration, clearError,
   };
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

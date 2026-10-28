@@ -20,18 +20,18 @@ function clip(value: string, limit: number) {
   return text.length > limit ? text.slice(0, limit) : text;
 }
 
-export function planHistory(snapshot: DailySnapshot | null): PlanHistory | null {
+export function planHistory(snapshot: DailySnapshot | null, seasonId?: string): PlanHistory | null {
   if (!snapshot) return null;
   const events = snapshot.events.filter((event) => !event.undone_at);
   // The season to learn from is the most recent one that was actually lived in.
   const seasons = [...snapshot.seasons].sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const season = seasons.find((candidate) => events.some((event) => event.season_id === candidate.id));
+  const season = seasonId ? seasons.find((candidate) => candidate.id === seasonId) : seasons.find((candidate) => events.some((event) => event.season_id === candidate.id));
   if (!season) return null;
 
   const seasonEvents = events.filter((event) => event.season_id === season.id);
   const counted = seasonEvents.filter(isCounted);
   const practisedDays = new Set(counted.map((event) => event.local_date));
-  if (practisedDays.size === 0) return null;
+  if (practisedDays.size === 0 && !seasonId) return null;
 
   const practices = snapshot.practices.filter((practice) => practice.season_id === season.id);
   const daysFor = (id: string) =>

@@ -1047,7 +1047,7 @@ export async function suggestReviewPractice(answers: OnboardingAnswers, practice
  */
 export async function generateTree(
   answers: OnboardingAnswers,
-  options: { allowAi?: boolean; history?: PlanHistory | null } = {},
+  options: { allowAi?: boolean; history?: PlanHistory | null; chapterReflection?: { question: string; answer: string }[] } = {},
 ): Promise<TreeResult> {
   const safety = assessGoalSafety(answers.goal);
   if (!safety.safe) {
@@ -1071,6 +1071,7 @@ export async function generateTree(
           blocker: answers.blocker,
           timeBudget: answers.timeBudget,
           history: options.history ?? null,
+          chapterReflection: (options.chapterReflection ?? []).map(({ question, answer }) => ({ question: scrubGoalForPrivacy(question), answer: scrubGoalForPrivacy(answer) })),
           context: (answers.context ?? []).map(({ question, answer }) => ({ question: scrubGoalForPrivacy(question), answer: scrubGoalForPrivacy(answer) })),
           conservativeMode: answers.conservativeMode, targetDate: answers.targetDate, legEnd: answers.legEnd, daysRemaining: answers.daysRemaining,
         },

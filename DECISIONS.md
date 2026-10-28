@@ -1,5 +1,12 @@
 # Implementation decisions
 
+## Chapter continuation — Step A
+
+- A chapter is a linked new season; existing seasons and milestone constraints are unchanged. Reflection answers are transient and not stored with the plan. Separate, versioned consent is required before sending them to Gemini; withdrawing AI consent clears it.
+- A failed AI draft cannot silently become a local plan. The local alternative requires an explicit choice. After a pain event, the person must use the easy practice before starting a new chapter, so the pain guard is not reset.
+- Approval checks the previous season, plan version, account time zone and preview start date under the account lock. The previous season closes only in the transaction that creates the next one.
+- Finish for now remains a non-destructive stub in Step A; legacy season timing and milestone rules are unchanged. If an easy second-week rung is missing, the preview shows the approved first-week easy version, which matches the existing continuation behavior.
+
 ## Follow-up: weekly easy version, longer sessions, more questions
 
 - The weekly AI draft was rejected with "bad weekly easy version" when any node's two-minute version was unsafe or malformed. That check is gone. `dropInvalidEasyVersions` deletes an unusable node or branch easy version before validation, and the client derives one from the first step (as it already did when the model omitted it). A plan is never lost over a bonus field. Tested in `tests/rolling.test.ts`.
