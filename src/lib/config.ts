@@ -14,8 +14,36 @@ export const AI_CONSENT_VERSION = "2026-10-ai-3";
 /** Set to true when the Supabase project requires email confirmation. */
 export const EMAIL_VERIFICATION_REQUIRED = false;
 
-export const SUPPORT_URL = "https://example.com/vitality-tree/support"; // TODO: replace before release
-export const PRIVACY_URL = "https://example.com/vitality-tree/privacy"; // TODO: replace before release
+/** Public pages shown in Settings. Both are set in .env; never put a secret here. */
+const PLACEHOLDER_HOST = "https://example.com/";
+export const SUPPORT_URL = process.env.EXPO_PUBLIC_SUPPORT_URL?.trim() || `${PLACEHOLDER_HOST}vitality-tree/support`;
+export const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL?.trim() || `${PLACEHOLDER_HOST}vitality-tree/privacy`;
+
+export function isPlaceholderUrl(url: string) {
+  const lowered = url.trim().toLowerCase();
+  return (
+    !/^https:\/\//.test(lowered) ||
+    lowered.startsWith(PLACEHOLDER_HOST) ||
+    lowered.includes("your-domain.") ||
+    lowered.includes(".example/")
+  );
+}
+
+/**
+ * Called at development start-up, so a placeholder link is a red screen rather
+ * than a dead Settings row discovered after release. The release checklist also
+ * requires the two environment values to be set before a store build.
+ */
+export function assertReleaseConfig() {
+  const missing = [
+    isPlaceholderUrl(SUPPORT_URL) ? "EXPO_PUBLIC_SUPPORT_URL" : null,
+    isPlaceholderUrl(PRIVACY_URL) ? "EXPO_PUBLIC_PRIVACY_URL" : null,
+  ].filter((name): name is string => Boolean(name));
+  if (!missing.length) return;
+  throw new Error(
+    `Support and privacy links are still placeholders. Set ${missing.join(" and ")} in .env to the public https pages before testing or building.`,
+  );
+}
 
 /** Deep link used for password recovery; matches the app scheme. */
 export const RESET_REDIRECT = "vitalitytree://reset-password";

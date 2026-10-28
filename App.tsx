@@ -30,11 +30,15 @@ import { Onboarding } from "./src/components/Onboarding";
 import { SetupRequired } from "./src/components/SetupRequired";
 import { ResetPasswordScreen } from "./src/components/ResetPasswordScreen";
 import { ReminderChoice } from "./src/components/ReminderChoice";
+import { assertReleaseConfig } from "./src/lib/config";
 import { colors } from "./src/theme";
 import { Body } from "./src/components/Type";
 import { PrimaryButton, QuietButton } from "./src/components/Controls";
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+// Fail in development rather than ship dead support and privacy links.
+if (__DEV__) assertReleaseConfig();
 
 function Root() {
   const { loading, user, profile, snapshot, cloudEnabled, loadFailed, error, retryLoad, signOut, recovering, reminderSetupPending, setReminderSetupPending } = useGame();

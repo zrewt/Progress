@@ -18,6 +18,14 @@
 - The pain pause suppresses both offers, because the easier version is already forced in that state.
 - Phone checks for this stage: two skipped days then the easy offer, three hard ratings then the lighter offer, dismissing an offer, airplane mode with storage available, and a device that refuses storage (no "saved" wording anywhere). No phone run, build or deployment has been performed.
 
+## Target-date change: Stage 6 release basics
+
+- Support and privacy links are now `EXPO_PUBLIC_SUPPORT_URL` and `EXPO_PUBLIC_PRIVACY_URL`, with the old `example.com` values as the explicit placeholder fallback. `assertReleaseConfig()` throws at start-up in development while either value is missing, not `https`, or still an example/your-domain host, so a dead Settings row cannot survive to a build. The template values in `.env.example` are deliberately treated as placeholders too. This is the literal reading of the stage: development fails loudly instead of warning. A release build still shows the placeholder until the two environment values are set in the EAS build profile; nothing in the app can invent a real page.
+- The policy draft is `docs/PRIVACY_POLICY.md` ("draft, needs review"), written from the code: target date and leg length, personalization answers and their removal behaviour, weekly inputs sent for a proposal, reminder time and offline queue as device-only, age bracket as self-declared and unverifiable, and the screening answer as not stored. `docs/PRIVACY_DATA.md` remains the internal inventory.
+- The device checklist is a separate file so it can be printed and filled in on the phone; it covers the date edge cases, the reminder permission states, pain, offline and deletion end to end. Notifications require a development build.
+- The release checklist's migration list was stale (four files) and `apply_all_stages.sql` remains a bundle of only those four. The list now names all eight migrations and marks the bundle stale rather than silently letting a new install skip the target-date and safety schema.
+- TestFlight gaps were read from `eas.json`/`app.json` and listed, not fixed: no project link, no iOS submit credentials, a fixed build number with no auto-increment, no export-compliance answer, and store-side metadata. No build was run.
+
 ## Stage 1
 
 1. Season dates are local calendar dates; ends_on is exclusive (started_on + 30). Events retain their derived local_date permanently. Timezone changes affect new events, not history. UTC is the explicit migration default because the original app never saved a timezone; users can change it later.
