@@ -30,15 +30,21 @@ import { Onboarding } from "./src/components/Onboarding";
 import { SetupRequired } from "./src/components/SetupRequired";
 import { ResetPasswordScreen } from "./src/components/ResetPasswordScreen";
 import { ReminderChoice } from "./src/components/ReminderChoice";
-import { assertReleaseConfig } from "./src/lib/config";
+import { missingLinkConfig } from "./src/lib/config";
 import { colors } from "./src/theme";
 import { Body } from "./src/components/Type";
 import { PrimaryButton, QuietButton } from "./src/components/Controls";
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
-// Fail in development rather than ship dead support and privacy links.
-if (__DEV__) assertReleaseConfig();
+// Warn, never block: Settings shows these rows as coming soon until the public
+// pages exist. The release checklist requires them before a store build.
+if (__DEV__) {
+  const missingLinks = missingLinkConfig();
+  if (missingLinks.length) {
+    console.warn(`[config] ${missingLinks.join(" and ")} not set. Settings shows those links as coming soon.`);
+  }
+}
 
 function Root() {
   const { loading, user, profile, snapshot, cloudEnabled, loadFailed, error, retryLoad, signOut, recovering, reminderSetupPending, setReminderSetupPending } = useGame();

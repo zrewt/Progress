@@ -4,7 +4,7 @@ import type { PersonalizationAnswer } from "../lib/types";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
 import { useGame } from "../lib/game-context";
-import { APP_VERSION, PRIVACY_URL, SUPPORT_URL } from "../lib/config";
+import { APP_VERSION, PRIVACY_URL, SUPPORT_URL, isPlaceholderUrl } from "../lib/config";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { PrimaryButton, QuietButton } from "./Controls";
 import { Body, Display, Label, Micro } from "./Type";
@@ -142,12 +142,20 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
             <View style={styles.block}><ReminderChoice /></View>
             <View style={styles.block}>
               <Label>Help and privacy</Label>
-              <Pressable onPress={() => void Linking.openURL(SUPPORT_URL)} accessibilityRole="link" accessibilityLabel="Open support page" style={styles.link}>
-                <Text style={styles.linkText}>Support</Text>
-              </Pressable>
-              <Pressable onPress={() => void Linking.openURL(PRIVACY_URL)} accessibilityRole="link" accessibilityLabel="Open privacy policy" style={styles.link}>
-                <Text style={styles.linkText}>Privacy policy</Text>
-              </Pressable>
+              {isPlaceholderUrl(SUPPORT_URL) ? (
+                <Text style={styles.linkPending}>Support — page coming soon</Text>
+              ) : (
+                <Pressable onPress={() => void Linking.openURL(SUPPORT_URL)} accessibilityRole="link" accessibilityLabel="Open support page" style={styles.link}>
+                  <Text style={styles.linkText}>Support</Text>
+                </Pressable>
+              )}
+              {isPlaceholderUrl(PRIVACY_URL) ? (
+                <Text style={styles.linkPending}>Privacy policy — page coming soon</Text>
+              ) : (
+                <Pressable onPress={() => void Linking.openURL(PRIVACY_URL)} accessibilityRole="link" accessibilityLabel="Open privacy policy" style={styles.link}>
+                  <Text style={styles.linkText}>Privacy policy</Text>
+                </Pressable>
+              )}
             </View>
 
             <View style={styles.block}>
@@ -189,6 +197,7 @@ const styles = StyleSheet.create({
   muted: { textTransform: "none", letterSpacing: 0.3 },
   contextInput: { minHeight: 48, color: colors.bone, borderBottomWidth: 1, borderColor: hairline, fontFamily: fonts.sans, fontSize: 15 },
   link: { minHeight: 44, justifyContent: "center" },
+  linkPending: { minHeight: 44, paddingVertical: 13, fontFamily: fonts.sans, fontSize: 12.5, color: colors.sageDim },
   linkText: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.bone, textDecorationLine: "underline" },
   danger: { gap: 8, padding: 12, borderLeftWidth: 2, borderLeftColor: colors.clay, backgroundColor: alpha(colors.clay, 0.07) },
   notice: { fontFamily: fonts.sans, fontSize: 11.5, lineHeight: 18, color: colors.boneDim },

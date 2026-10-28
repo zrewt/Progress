@@ -29,20 +29,21 @@ export function isPlaceholderUrl(url: string) {
   );
 }
 
-/**
- * Called at development start-up, so a placeholder link is a red screen rather
- * than a dead Settings row discovered after release. The release checklist also
- * requires the two environment values to be set before a store build.
- */
-export function assertReleaseConfig() {
-  const missing = [
-    isPlaceholderUrl(SUPPORT_URL) ? "EXPO_PUBLIC_SUPPORT_URL" : null,
-    isPlaceholderUrl(PRIVACY_URL) ? "EXPO_PUBLIC_PRIVACY_URL" : null,
+export function missingLinkNames(support: string, privacy: string) {
+  return [
+    isPlaceholderUrl(support) ? "EXPO_PUBLIC_SUPPORT_URL" : null,
+    isPlaceholderUrl(privacy) ? "EXPO_PUBLIC_PRIVACY_URL" : null,
   ].filter((name): name is string => Boolean(name));
-  if (!missing.length) return;
-  throw new Error(
-    `Support and privacy links are still placeholders. Set ${missing.join(" and ")} in .env to the public https pages before testing or building.`,
-  );
+}
+
+/**
+ * Links that still need a real page. Development only warns about these, and
+ * Settings shows them as coming soon instead of opening a dead URL, so the app
+ * runs without published pages. The release checklist still requires both
+ * values before a store build.
+ */
+export function missingLinkConfig() {
+  return missingLinkNames(SUPPORT_URL, PRIVACY_URL);
 }
 
 /** Deep link used for password recovery; matches the app scheme. */

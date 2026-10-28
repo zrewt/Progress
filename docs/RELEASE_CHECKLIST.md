@@ -95,9 +95,10 @@ true, stop and re-run the grant statements from `202610250001_daily_loop.sql`.
 - Confirm crisis resources for each launch region in `CRISIS_RESOURCES` (`src/lib/safety-rules.ts`),
   then run `npm run safety:sync` so the Edge Function copy matches. `npm run safety:check` fails otherwise.
 - Set `EXPO_PUBLIC_SUPPORT_URL` and `EXPO_PUBLIC_PRIVACY_URL` in `.env` and in the EAS
-  build environment. The app throws at start-up in development while either is missing or a
-  placeholder (an `example.com`/`your-domain` URL), so a dead Settings link is caught before
-  a build. Neither value may be a secret; both are public pages.
+  build environment. The app runs without them, logs one development warning and shows the
+  two Settings rows as "page coming soon", so testing is not blocked while the pages are
+  written. Both must point at live https pages before a store build: a release build will
+  otherwise show the same "coming soon" rows. Neither value may be a secret.
 - Publish the privacy policy. `docs/PRIVACY_POLICY.md` is the draft to review and publish;
   `docs/PRIVACY_DATA.md` is the internal inventory it was written from.
 
