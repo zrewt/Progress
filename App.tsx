@@ -28,6 +28,7 @@ import { LoadingScreen } from "./src/components/LoadingScreen";
 import { Onboarding } from "./src/components/Onboarding";
 import { SetupRequired } from "./src/components/SetupRequired";
 import { ResetPasswordScreen } from "./src/components/ResetPasswordScreen";
+import { ReminderChoice } from "./src/components/ReminderChoice";
 import { colors } from "./src/theme";
 import { Body } from "./src/components/Type";
 import { PrimaryButton, QuietButton } from "./src/components/Controls";
@@ -35,7 +36,7 @@ import { PrimaryButton, QuietButton } from "./src/components/Controls";
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function Root() {
-  const { loading, user, profile, snapshot, cloudEnabled, loadFailed, error, retryLoad, signOut, recovering } = useGame();
+  const { loading, user, profile, snapshot, cloudEnabled, loadFailed, error, retryLoad, signOut, recovering, reminderSetupPending, setReminderSetupPending } = useGame();
 
   return (
     <>
@@ -57,6 +58,8 @@ function Root() {
         <AuthScreen />
       ) : !profile ? (
         <Onboarding />
+      ) : reminderSetupPending ? (
+        <View style={{ flex: 1, justifyContent: "center", padding: 24 }}><ReminderChoice onDone={() => setReminderSetupPending(false)} /></View>
       ) : (
         <Dashboard />
       )}

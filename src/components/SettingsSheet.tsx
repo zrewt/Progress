@@ -8,6 +8,7 @@ import { APP_VERSION, PRIVACY_URL, SUPPORT_URL } from "../lib/config";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { PrimaryButton, QuietButton } from "./Controls";
 import { Body, Display, Label, Micro } from "./Type";
+import { ReminderChoice } from "./ReminderChoice";
 import { ConsentSheet } from "./ConsentSheet";
 
 export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -138,6 +139,7 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
                 {editingContext ? <><QuietButton label="Save details" onPress={() => void saveContext()} disabled={busy} /><QuietButton label="Cancel" onPress={() => setEditingContext(null)} disabled={busy} /></> : (activeSeason.personalization_context ?? []).length ? <QuietButton label="Change or remove details" onPress={() => setEditingContext((activeSeason.personalization_context ?? []).map((item) => ({ ...item })))} disabled={busy} /> : null}
               </View>
             ) : null}
+            <View style={styles.block}><ReminderChoice /></View>
             <View style={styles.block}>
               <Label>Help and privacy</Label>
               <Pressable onPress={() => void Linking.openURL(SUPPORT_URL)} accessibilityRole="link" accessibilityLabel="Open support page" style={styles.link}>

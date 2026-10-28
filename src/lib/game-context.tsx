@@ -11,6 +11,7 @@ import { todayState, type TodayView } from "./today";
 import { planHistory } from "./engine/history";
 import { AI_CONSENT_VERSION, RESET_REDIRECT } from "./config";
 import { parseRecoveryLink } from "./auth-links";
+import { cancelReminders, reminderPermission, rescheduleReminder, saveReminderTime } from "./reminders";
 import { deviceQueue } from "./offline-store";
 import { enqueue, replay } from "./offline-queue";
 import type { DailyPlan, DailySnapshot, EventInput, SeasonHistoryEntry } from "./daily-types";
@@ -23,6 +24,9 @@ interface GameContextValue {
   snapshot: DailySnapshot | null; today: TodayView | null; loadFailed: boolean; error: string | null; celebration: Celebration | null;
   undoOffer: PendingUndo | null; history: SeasonHistoryEntry[] | null;
   aiAllowed: boolean; recovering: boolean;
+  reminderSetupPending: boolean;
+  setReminderSetupPending: (pending: boolean) => void;
+  configureReminder: (time: string | null) => Promise<boolean>;
   queueCount: number; syncState: "idle" | "pending" | "syncing" | "error";
   syncNow: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<AuthResult>;
@@ -61,6 +65,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   const [undoOffer, setUndoOffer] = useState<PendingUndo | null>(null), [history, setHistory] = useState<SeasonHistoryEntry[] | null>(null);
   const [recovering, setRecovering] = useState(false);
+  const [reminderSetupPending, setReminderSetupPending] = useState(false);
+  const remindersSuspended = useRef(false);
   const [queueCount, setQueueCount] = useState(0);
   const [syncState, setSyncState] = useState<"idle" | "pending" | "syncing" | "error">("idle");
   const [scope] = useState(() => new AccountScope());
@@ -97,6 +103,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const result = await data.load(next.id);
         if (!scope.isCurrent(token)) return;
         setSnapshot(result); setLoadFailed(false); setError(null);
+        if (!remindersSuspended.current) void rescheduleReminder(next.id, result).catch(() => { if (scope.isCurrent(token)) setError("Your journal loaded, but the next reminder could not be scheduled."); });
       } catch {
         if (scope.isCurrent(token)) { setLoadFailed(true); setError("We couldn’t load your journal. Nothing has been overwritten. Please try again."); }
       } finally {
@@ -115,6 +122,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const nextAccount = next ? account(next) : null;
       if (currentUser.current?.id !== nextAccount?.id) {
         scope.switch(nextAccount?.id ?? null); inflight.current = null; retryEvents.current.clear();
+        remindersSuspended.current = false;
+        void cancelReminders().catch(() => setError("Scheduled reminders could not be cleared. Check system notification settings."));
         currentUser.current = nextAccount; setUser(nextAccount); setSnapshot(null); setCelebration(null); setUndoOffer(null); setHistory(null);
         setLoadFailed(false); setError(null);
       }
@@ -202,6 +211,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
     catch { return { error: "Check your connection and try again." }; } finally { setAuthBusy(false); }
   }
   async function signOut() {
+    remindersSuspended.current = true;
+    await cancelReminders().catch(() => setError("Reminders could not be cleared. Turn them off in system settings."));
+    setReminderSetupPending(false);
     scope.switch(null); currentUser.current = null; inflight.current = null; retryEvents.current.clear();
     setUser(null); setSnapshot(null); setCelebration(null); setUndoOffer(null); setHistory(null); setLoadFailed(false); setError(null);
     const result = await sb?.auth.signOut({ scope: "local" });
@@ -225,7 +237,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // A finished season is the best briefing the generator can get.
     const result = built ?? await generateTree(answers, { allowAi: Boolean(snapshot?.profile?.ai_consent_at) && snapshot?.profile?.ai_consent_version === AI_CONSENT_VERSION, history: planHistory(snapshot) });
     if (!scope.isCurrent(token)) return;
-    await startSeason(dailyPlanFromTree(answers, result.tree, result.source));
+    setReminderSetupPending(true);
+    if (!await startSeason(dailyPlanFromTree(answers, result.tree, result.source))) setReminderSetupPending(false);
   }
   async function recordEvent(input: Omit<EventInput, "client_event_id" | "occurred_at">) {
     if (!data || !currentUser.current || loadFailed || loading) return false;
@@ -318,6 +331,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }
   async function withdrawConsent() {
     if (!data || !currentUser.current) return false;
+    remindersSuspended.current = true;
+    try { await saveReminderTime(currentUser.current.id, null); await cancelReminders(); }
+    catch { setError("Reminders could not be cleared. Check system notification settings."); return false; }
     const token = scope.token();
     try { await data.withdrawConsent(); if (!scope.isCurrent(token)) return false; await retryLoad(); return true; }
     catch { if (scope.isCurrent(token)) setError("That change could not be saved. Try again."); return false; }
@@ -363,11 +379,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
   async function deleteAccount(): Promise<AuthResult> {
     if (!sb) return { error: "Account access isn’t configured yet." };
     try {
+      if (currentUser.current) await saveReminderTime(currentUser.current.id, null);
+      remindersSuspended.current = true;
+      await cancelReminders();
       const { error: failure } = await sb.functions.invoke("delete-account", { body: { confirm: true } });
       if (failure) return { error: "Your account could not be deleted. Nothing has changed. Please try again or contact support." };
       await signOut();
       return { info: "Your account and journal have been deleted." };
     } catch { return { error: "Your account could not be deleted. Nothing has changed. Please try again or contact support." }; }
+  }
+  async function configureReminder(time: string | null) {
+    const account = currentUser.current;
+    if (!account) return false;
+    const token = scope.token();
+    try {
+      if (time && await reminderPermission(true) !== "granted") return false;
+      if (!scope.isCurrent(token)) return false;
+      await saveReminderTime(account.id, time);
+      remindersSuspended.current = false;
+      if (time && snapshot) await rescheduleReminder(account.id, snapshot); else await cancelReminders();
+      return scope.isCurrent(token);
+    } catch { if (scope.isCurrent(token)) setError("Your reminder could not be saved. Please try again."); return false; }
   }
   const cancelRecovery = useCallback(() => setRecovering(false), []);
   const dismissCelebration = useCallback(() => setCelebration(null), []);
@@ -377,7 +409,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     treeSource: !activeSeason?.plan_source_verified ? null : activeSeason.plan_source === "ai" ? "edge-ai" : activeSeason.plan_source === "local" ? "seed-engine" : null,
     snapshot, today, loadFailed, error, celebration, undoOffer, history,
     aiAllowed: Boolean(snapshot?.profile?.ai_consent_at) && snapshot?.profile?.ai_consent_version === AI_CONSENT_VERSION,
-    recovering, queueCount, syncState, syncNow,
+    recovering, reminderSetupPending, setReminderSetupPending, configureReminder, queueCount, syncState, syncNow,
     signIn, signUp, signOut, retryLoad, submitOnboarding, startSeason, recordEvent, undoEvent, dismissUndo,
     editPlan, replacePractice, acceptWeek, submitReview, finishSeason, loadHistory, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext,
     requestPasswordReset, resendConfirmation, updatePassword, cancelRecovery, deleteAccount, completeNode, dismissCelebration, clearError,
