@@ -1,17 +1,26 @@
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ArrowRight, Clock, Feather } from "lucide-react-native";
 import type { Practice } from "../lib/daily-types";
+import type { MidWeekOffer } from "../lib/adapt";
 import { useGame } from "../lib/game-context";
 import { PILLAR_MAP } from "../lib/pillars";
 import { isSupportingDue } from "../lib/today";
 import { ladderWeeks, rungFor } from "../lib/engine/week";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { PillarIcon } from "./PillarIcon";
-import { PrimaryButton } from "./Controls";
+import { PrimaryButton, QuietButton } from "./Controls";
 import { Body, Display, Label, Micro } from "./Type";
 
-export function TodayCard({ onBegin }: { onBegin: (practice: Practice) => void }) {
-  const { today, snapshot } = useGame();
+export function TodayCard({
+  onBegin,
+}: {
+  onBegin: (practice: Practice, options?: { easy?: boolean }) => void;
+}) {
+  const { today, snapshot, setLighterWeek } = useGame();
+  const [dismissed, setDismissed] = useState<MidWeekOffer["kind"][]>([]);
+  const [lighterBusy, setLighterBusy] = useState(false);
+  const [offerError, setOfferError] = useState<string | null>(null);
   if (!today) return null;
 
   const { primary, season, countedToday, easierByDefault, supporting, week } = today;
@@ -24,6 +33,27 @@ export function TodayCard({ onBegin }: { onBegin: (practice: Practice) => void }
   const doneEasily = countedEvent?.kind === "easy";
   const seasonEvents = (snapshot?.events ?? []).filter((event) => !event.undone_at && event.season_id === season.id);
   const dueSupporting = supporting.filter((practice) => isSupportingDue(practice, seasonEvents, today.today, season));
+  const offers = today.offers.filter(
+    (offer) => !dismissed.includes(offer.kind) && (offer.kind === "lighter_week" || !countedToday),
+  );
+
+  function dismiss(offer: MidWeekOffer) {
+    setDismissed((previous) => [...previous, offer.kind]);
+  }
+
+  async function accept(offer: MidWeekOffer) {
+    if (offer.kind === "easy_today") {
+      dismiss(offer);
+      onBegin(primary, { easy: true });
+      return;
+    }
+    setLighterBusy(true);
+    setOfferError(null);
+    const saved = await setLighterWeek();
+    setLighterBusy(false);
+    if (saved) dismiss(offer);
+    else setOfferError("A lighter week could not be saved just now. Nothing has changed.");
+  }
 
   return (
     <View style={styles.card}>
@@ -96,6 +126,33 @@ export function TodayCard({ onBegin }: { onBegin: (practice: Practice) => void }
         </>
       )}
 
+      {offers.map((offer) => (
+        <View key={offer.kind} style={styles.offer}>
+          <Text style={styles.offerTitle}>{offer.title}</Text>
+          <Text style={styles.offerBody}>{offer.body}</Text>
+          {offerError && offer.kind === "lighter_week" ? (
+            <Text style={styles.offerError} accessibilityRole="alert">{offerError}</Text>
+          ) : null}
+          <View style={styles.offerActions}>
+            <QuietButton
+              label={lighterBusy && offer.kind === "lighter_week" ? "Saving" : offer.confirm}
+              onPress={() => void accept(offer)}
+              disabled={lighterBusy}
+              style={{ flex: 1 }}
+            />
+            <Pressable
+              onPress={() => dismiss(offer)}
+              accessibilityRole="button"
+              accessibilityLabel="Not now"
+              hitSlop={8}
+              style={styles.offerDismiss}
+            >
+              <Text style={styles.offerDismissText}>Not now</Text>
+            </Pressable>
+          </View>
+        </View>
+      ))}
+
       {dueSupporting.length ? (
         <View style={styles.supporting}>
           <Micro style={{ color: colors.lichenDim }}>Also available this week</Micro>
@@ -145,6 +202,16 @@ const styles = StyleSheet.create({
   weekNote: { marginTop: 6, textTransform: "none", letterSpacing: 0.3, lineHeight: 15, color: colors.copperLight },
   againRow: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 },
   againText: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.sage },
+  offer: {
+    marginTop: 16, padding: 14, gap: 6,
+    borderLeftWidth: 2, borderLeftColor: colors.copperLight, backgroundColor: alpha(colors.copper, 0.06),
+  },
+  offerTitle: { fontFamily: fonts.sansMedium, fontSize: 12.5, lineHeight: 18, color: colors.bone },
+  offerBody: { fontFamily: fonts.sans, fontSize: 11.5, lineHeight: 17, color: colors.sage },
+  offerError: { fontFamily: fonts.sans, fontSize: 11, lineHeight: 16, color: colors.clay },
+  offerActions: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 10 },
+  offerDismiss: { minHeight: 44, justifyContent: "center", paddingHorizontal: 4 },
+  offerDismissText: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.sage },
   supporting: { marginTop: 20, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hairline, gap: 4 },
   supportRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 2 },
   supportTitle: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.bone },

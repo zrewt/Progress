@@ -19,12 +19,14 @@ export const deviceQueue: QueueStore = {
     try {
       if (!events.length) await AsyncStorage.removeItem(key(userId));
       else await AsyncStorage.setItem(key(userId), JSON.stringify(events));
+      return true;
     } catch {
-      // Storage failures must never lose an in-memory attempt; the UI still shows the error.
+      // The caller decides what to tell the person; never report a failed write as saved.
+      return false;
     }
   },
 };
 
 export async function clearQueue(userId: string) {
-  await deviceQueue.write(userId, []);
+  return deviceQueue.write(userId, []);
 }

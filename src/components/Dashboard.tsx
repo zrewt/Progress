@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RotateCcw, X } from "lucide-react-native";
 import { useGame } from "../lib/game-context";
 import { daysBetween } from "../lib/progression";
+import { syncMessage } from "../lib/sync-status";
 import type { Practice } from "../lib/daily-types";
 import type { TreeNode } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
@@ -23,6 +24,8 @@ export function Dashboard() {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const [active, setActive] = useState<Practice | null>(null);
+  // Set only when the person accepted the fixed-rule offer to use the easier version.
+  const [easyRequested, setEasyRequested] = useState(false);
   const [editing, setEditing] = useState(false);
   const [finishing, setFinishing] = useState(false);
 
@@ -32,6 +35,11 @@ export function Dashboard() {
   const season = today.season;
   const daysLeft = Math.max(0, daysBetween(today.today, season.ends_on));
   const grown = nodes.filter((node) => node.status === "completed").length;
+  const sync = syncMessage(syncState, queueCount);
+  const begin = (practice: Practice, options?: { easy?: boolean }) => {
+    setEasyRequested(!!options?.easy);
+    setActive(practice);
+  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -85,7 +93,7 @@ export function Dashboard() {
           </View>
         ) : null}
 
-        <TodayCard onBegin={(practice) => setActive(practice)} />
+        <TodayCard onBegin={begin} />
 
         <WeekReviewCard />
 
@@ -147,17 +155,9 @@ export function Dashboard() {
           </View>
           <SeasonHistory />
           <View style={styles.syncRow}>
-            <View style={[styles.syncDot, { backgroundColor: syncState === "error" ? colors.clay : syncState === "idle" ? colors.lichen : colors.ochre }]} />
-            <Text style={styles.syncText} accessibilityRole="text">
-              {syncState === "idle"
-                ? "Everything is saved"
-                : syncState === "syncing"
-                  ? `Sending ${queueCount} ${queueCount === 1 ? "entry" : "entries"}…`
-                  : syncState === "error"
-                    ? `${queueCount} ${queueCount === 1 ? "entry is" : "entries are"} waiting to sync`
-                    : `${queueCount} saved on this device, waiting to sync`}
-            </Text>
-            {syncState === "idle" ? null : (
+            <View style={[styles.syncDot, { backgroundColor: syncState === "error" || syncState === "unsaved" ? colors.clay : syncState === "idle" ? colors.lichen : colors.ochre }]} />
+            <Text style={styles.syncText} accessibilityRole="text">{sync.text}</Text>
+            {!sync.retry ? null : (
               <Pressable onPress={() => void syncNow()} accessibilityRole="button" accessibilityLabel="Try syncing now" hitSlop={10} style={styles.syncRetry}>
                 <Text style={styles.syncRetryText}>Try now</Text>
               </Pressable>
@@ -193,8 +193,8 @@ export function Dashboard() {
         <PracticeSheet
           key={active.id}
           practice={active}
-          defaultEasy={today.easierByDefault && active.id === today.primary.id}
-          onClose={() => setActive(null)}
+          defaultEasy={(today.easierByDefault || easyRequested) && active.id === today.primary.id}
+          onClose={() => { setActive(null); setEasyRequested(false); }}
         />
       ) : null}
       {editing ? <EditPlanSheet visible onClose={() => setEditing(false)} /> : null}

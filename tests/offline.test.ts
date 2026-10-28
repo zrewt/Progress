@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { QUEUE_LIMIT, backoffMs, enqueue, markFailed, nextBatch, removeSent, replay, type QueuedEvent } from "../src/lib/offline-queue";
+import { QUEUE_LIMIT, backoffMs, enqueue, markFailed, nextBatch, queueEvent, removeSent, replay, type QueuedEvent, type QueueStore } from "../src/lib/offline-queue";
+import { syncMessage } from "../src/lib/sync-status";
 import type { EventInput } from "../src/lib/daily-types";
 
 const event = (id: string, day = "2026-10-24"): EventInput => ({
@@ -45,6 +46,37 @@ test("replay removes what was sent and keeps what failed", async () => {
   assert.equal(result.remaining.find((item) => item.client_event_id === "b")?.attempts, 1);
   assert.ok(result.failure);
   assert.equal(result.remaining.find((item) => item.client_event_id === "c")?.attempts, 0);
+});
+
+test("a stored event is reported as queued, and a refused write is never reported as saved", async () => {
+  const saved: QueuedEvent[] = [];
+  const working: QueueStore = {
+    async read() { return [...saved]; },
+    async write(_user, events) { saved.splice(0, saved.length, ...events); return true; },
+  };
+  const queued = await queueEvent(working, "u1", event("a"));
+  assert.equal(queued.status, "queued");
+  assert.equal(queued.queue.length, 1);
+  assert.equal(saved.length, 1);
+
+  const refusing: QueueStore = {
+    async read() { return []; },
+    async write() { return false; },
+  };
+  const unsaved = await queueEvent(refusing, "u1", event("b"));
+  assert.equal(unsaved.status, "unsaved");
+  assert.equal(unsaved.queue.length, 1, "the attempt is still returned for a retry");
+});
+
+test("only a queued entry may be described as saved", () => {
+  assert.match(syncMessage("pending", 1).text, /saved on this device, will sync/i);
+  assert.match(syncMessage("pending", 2).text, /saved on this device, will sync/i);
+  assert.doesNotMatch(syncMessage("unsaved", 0).text, /saved/i);
+  assert.doesNotMatch(syncMessage("error", 2).text, /saved/i);
+  assert.equal(syncMessage("unsaved", 0).retry, false);
+  assert.equal(syncMessage("pending", 1).retry, true);
+  assert.equal(syncMessage("idle", 0).retry, false);
+  assert.equal(syncMessage("syncing", 3).text, "Sending 3 entries…");
 });
 
 test("a successful replay empties the queue and failures never drop entries", async () => {

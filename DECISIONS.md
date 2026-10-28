@@ -9,6 +9,15 @@
 - The existing database-test auth.users stub gained raw_user_meta_data to test the real signup trigger shape. No previously saved season, event, migration or historical plan was changed.
 - Phone checks: try under-13 signup, teen physical onboarding, adult physical screening yes/no, a Matterhorn goal, pain followed by easy practice, and signed-in legacy account age confirmation. No phone run, native build, deployment or remote migration has been performed.
 
+## Target-date change: Stage 5 mid-week adaptation and trust fixes
+
+- The tree copy now says what the code does: every tier is open and completing one keeps it grown. Milestones in this app are derived from milestone counts, not a lock chain, so making the tree sequential would have meant a new lock state and would have hidden practices the person already owns. The "Locked" legend was removed for the same reason: no node is ever locked here. This is the smallest truthful change.
+- `QueueStore.write` now reports whether the device accepted the write. A failed local write is a new `unsaved` sync state, and no message outside the queued/idle states may contain the word "saved": the dashboard wording comes from `syncMessage` in `src/lib/sync-status.ts`, which is unit-tested for exactly that. When the write fails the event stays in the in-memory retry map with its original `client_event_id`, so the practice sheet can retry without double-counting.
+- Mid-week offers are fixed rules in `src/lib/adapt.ts`, never model output: two consecutive skipped days (not rest days, not undone, not another season) offers the easier version for today, and three counted practices rated 4 or 5 inside the current seven-day block offers a lighter week. Offers are dismissible for the session and never applied automatically.
+- The lighter-week offer uses a new owner-only RPC, `set_lighter_week`, because seasons are select-only for clients. It starts today rather than next week: `seasons` records only `week_mode_until`, so a future start would need another column. The window is capped at the leg boundary (`ends_on - 1`). This migration is written and tested in PGlite only; it is not applied to Supabase, so the offer's button reports a save failure until the migration is run.
+- The pain pause suppresses both offers, because the easier version is already forced in that state.
+- Phone checks for this stage: two skipped days then the easy offer, three hard ratings then the lighter offer, dismissing an offer, airplane mode with storage available, and a device that refuses storage (no "saved" wording anywhere). No phone run, build or deployment has been performed.
+
 ## Stage 1
 
 1. Season dates are local calendar dates; ends_on is exclusive (started_on + 30). Events retain their derived local_date permanently. Timezone changes affect new events, not history. UTC is the explicit migration default because the original app never saved a timezone; users can change it later.

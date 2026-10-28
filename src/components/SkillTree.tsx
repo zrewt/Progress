@@ -84,8 +84,8 @@ export function SkillTree({
           <Label>The progression</Label>
           <Display style={styles.sectionTitle}>The four branches</Display>
           <Body style={styles.sectionCopy}>
-            Each branch opens one practice at a time. Complete a node to grow the
-            next.
+            Each branch holds four practices. Every tier is open — complete one
+            and it stays grown.
           </Body>
         </View>
         <View style={styles.countBlock}>
@@ -527,10 +527,6 @@ export function SkillTree({
 
       <View style={styles.legend}>
         <View style={styles.legendItem}>
-          <View style={styles.legendLocked} />
-          <Text style={styles.legendText}>Locked</Text>
-        </View>
-        <View style={styles.legendItem}>
           <View style={styles.legendReady} />
           <Text style={styles.legendText}>Ready</Text>
         </View>
@@ -538,7 +534,7 @@ export function SkillTree({
           <View style={styles.legendDone} />
           <Text style={styles.legendText}>Complete</Text>
         </View>
-        <Text style={styles.legendHint}>One node opens the next</Text>
+        <Text style={styles.legendHint}>Every tier stays open</Text>
       </View>
     </View>
   );

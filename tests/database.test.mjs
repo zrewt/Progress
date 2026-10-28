@@ -201,6 +201,19 @@ test('weekly review, plan edits and replacement keep history intact', async(t)=>
   await assert.rejects(()=>db.exec("update public.weekly_reviews set decision='harder'"));
   await assert.rejects(()=>db.exec('delete from public.weekly_reviews'));
  });
+ await t.test('the mid-week offer lightens this season and only its owner can ask',async()=>{
+  await db.exec('reset role');
+  await db.exec(`update public.seasons set week_mode='same',week_mode_until=null where id='${season}'`);
+  await asUser(db);
+  await rpc(db,'set_lighter_week',[season]);
+  const row=(await db.query('select week_mode,week_mode_until,ends_on from public.seasons where id=$1',[season])).rows[0];
+  assert.equal(row.week_mode,'lighter');
+  assert.ok(row.week_mode_until,'a lighter week needs an end date');
+  assert.ok(row.week_mode_until<=row.ends_on,'the lighter window must stop at the leg boundary');
+  await asUser(db,B);
+  await assert.rejects(()=>rpc(db,'set_lighter_week',[season]));
+  await asUser(db);
+ });
  await t.test('editing the plan adds a version and retires instead of deleting',async()=>{
   const events=(await db.query('select count(*)::int n from public.completion_events')).rows[0].n;
   const version=await rpc(db,'update_plan',[season,{...plan,minutes_budget:15,practices:plan.practices.map(p=>({...p,full_variant:{...p.full_variant,minutes:15}}))}]);

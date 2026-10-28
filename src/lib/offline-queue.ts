@@ -7,7 +7,8 @@ export interface QueuedEvent extends EventInput {
 
 export interface QueueStore {
   read(userId: string): Promise<QueuedEvent[]>;
-  write(userId: string, events: QueuedEvent[]): Promise<void>;
+  /** Resolves false when the device refused the write, so callers cannot claim it is saved. */
+  write(userId: string, events: QueuedEvent[]): Promise<boolean>;
 }
 
 export const QUEUE_LIMIT = 200;
@@ -32,6 +33,27 @@ export function backoffMs(attempts: number): number {
 
 export function isReady(event: QueuedEvent, now = Date.now()): boolean {
   return now - Date.parse(event.queued_at) >= backoffMs(event.attempts);
+}
+
+export interface QueueOutcome {
+  status: "queued" | "unsaved";
+  queue: QueuedEvent[];
+}
+
+/**
+ * Persists one event on this device. The result is "unsaved" whenever the
+ * store refuses the write; the caller must then say so instead of "saved".
+ */
+export async function queueEvent(
+  store: QueueStore,
+  userId: string,
+  event: EventInput,
+  now = new Date(),
+): Promise<QueueOutcome> {
+  const current = await store.read(userId);
+  const queue = enqueue(current, event, now);
+  const written = await store.write(userId, queue);
+  return { status: written ? "queued" : "unsaved", queue };
 }
 
 export function markFailed(queue: QueuedEvent[], clientEventId: string): QueuedEvent[] {

@@ -14,7 +14,8 @@ import { AI_CONSENT_VERSION, RESET_REDIRECT } from "./config";
 import { parseRecoveryLink } from "./auth-links";
 import { cancelReminders, reminderPermission, rescheduleReminder, saveReminderTime } from "./reminders";
 import { deviceQueue } from "./offline-store";
-import { enqueue, replay } from "./offline-queue";
+import { queueEvent, replay } from "./offline-queue";
+import type { SyncState } from "./sync-status";
 import type { DailyPlan, DailySnapshot, EventInput, SeasonHistoryEntry } from "./daily-types";
 import type { AppUser, AuthResult, Celebration, GeneratedTree, OnboardingAnswers, PersonalizationAnswer, Profile, TreeNode } from "./types";
 
@@ -28,8 +29,9 @@ interface GameContextValue {
   reminderSetupPending: boolean;
   setReminderSetupPending: (pending: boolean) => void;
   configureReminder: (time: string | null) => Promise<boolean>;
-  queueCount: number; syncState: "idle" | "pending" | "syncing" | "error";
+  queueCount: number; syncState: SyncState;
   syncNow: () => Promise<void>;
+  setLighterWeek: () => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signUp: (name: string, email: string, password: string, bracket: AgeBracket | null) => Promise<AuthResult>;
   setAgeBracket: (bracket: AgeBracket) => Promise<boolean>;
@@ -70,7 +72,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [reminderSetupPending, setReminderSetupPending] = useState(false);
   const remindersSuspended = useRef(false);
   const [queueCount, setQueueCount] = useState(0);
-  const [syncState, setSyncState] = useState<"idle" | "pending" | "syncing" | "error">("idle");
+  const [syncState, setSyncState] = useState<SyncState>("idle");
   const [scope] = useState(() => new AccountScope());
   const currentUser = useRef<AppUser | null>(null);
   const inflight = useRef<Promise<void> | null>(null);
@@ -155,10 +157,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!queued.length) { if (scope.isCurrent(token)) { setQueueCount(0); setSyncState("idle"); } return; }
     if (scope.isCurrent(token)) { setQueueCount(queued.length); setSyncState("syncing"); }
     const result = await replay(queued, async (event) => { await data.record(event); });
-    await deviceQueue.write(account.id, result.remaining);
+    const written = await deviceQueue.write(account.id, result.remaining);
     if (!scope.isCurrent(token)) return;
     setQueueCount(result.remaining.length);
-    setSyncState(result.failure ? "error" : result.remaining.length ? "pending" : "idle");
+    // A device that refused the updated queue is not a synced account, even when
+    // every event reached the server: never report a storage failure as saved.
+    setSyncState(!written ? "unsaved" : result.failure ? "error" : result.remaining.length ? "pending" : "idle");
     if (result.sent.length) await retryLoad();
   }, [data, retryLoad, scope]);
 
@@ -270,13 +274,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const account = currentUser.current;
       if (account && scope.isCurrent(token)) {
         // Keep the exact event, including its client_event_id, so a retry can never double-count.
-        const queued = await deviceQueue.read(account.id);
-        const next = enqueue(queued, event);
-        await deviceQueue.write(account.id, next);
-        setQueueCount(next.length);
-        setSyncState("pending");
-        setError("You seem to be offline. Today’s practice is saved on this device and will sync on its own.");
-        return true;
+        const outcome = await queueEvent(deviceQueue, account.id, event);
+        if (!scope.isCurrent(token)) return false;
+        if (outcome.status === "queued") {
+          setQueueCount(outcome.queue.length);
+          setSyncState("pending");
+          setError("Saved on this device, will sync when you’re back online.");
+          return true;
+        }
+        // The device refused the write, so nothing is stored anywhere yet.
+        setQueueCount(0);
+        setSyncState("unsaved");
+        setError("This entry was not saved on this device. Check your connection and try again.");
+        return false;
       }
       return false;
     }
@@ -290,6 +300,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const token = scope.token();
     try { await data.undo(id); if (!scope.isCurrent(token)) return false; dismissUndo(); await retryLoad(); return true; }
     catch { if (scope.isCurrent(token)) setError("This entry could not be undone. Undo is available on the same local day."); return false; }
+  }
+  async function setLighterWeek() {
+    if (!data || !activeSeason || loadFailed) return false;
+    const token = scope.token();
+    try { await data.setLighterWeek(activeSeason.id); if (!scope.isCurrent(token)) return false; await retryLoad(); return true; }
+    catch { if (scope.isCurrent(token)) setError("A lighter week could not be saved. Your plan is unchanged."); return false; }
   }
   async function editPlan(plan: DailyPlan) {
     if (!data || !activeSeason || loadFailed) return false;
@@ -418,7 +434,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     treeSource: !activeSeason?.plan_source_verified ? null : activeSeason.plan_source === "ai" ? "edge-ai" : activeSeason.plan_source === "local" ? "seed-engine" : null,
     snapshot, today, loadFailed, error, celebration, undoOffer, history,
     aiAllowed: Boolean(snapshot?.profile?.ai_consent_at) && snapshot?.profile?.ai_consent_version === AI_CONSENT_VERSION,
-    recovering, reminderSetupPending, setReminderSetupPending, configureReminder, queueCount, syncState, syncNow,
+    recovering, reminderSetupPending, setReminderSetupPending, configureReminder, queueCount, syncState, syncNow, setLighterWeek,
     signIn, signUp, setAgeBracket, signOut, retryLoad, submitOnboarding, startSeason, recordEvent, undoEvent, dismissUndo,
     editPlan, replacePractice, acceptWeek, submitReview, finishSeason, loadHistory, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext,
     requestPasswordReset, resendConfirmation, updatePassword, cancelRecovery, deleteAccount, completeNode, dismissCelebration, clearError,

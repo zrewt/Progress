@@ -61,6 +61,7 @@ export class DailyData {
     });
   }
   acceptWeek(seasonId: string, draft: WeeklyDraft) { return this.rpc<number>("accept_practice_week", { p_season_id: seasonId, p_draft: draft }); }
+  setLighterWeek(seasonId: string) { return this.rpc<null>("set_lighter_week", { p_season_id: seasonId }); }
   endSeason(seasonId: string, status: "completed" | "archived") { return this.rpc<null>("end_season", { p_season_id: seasonId, p_status: status }); }
   history() { return this.rpc<SeasonHistoryEntry[]>("season_history", {}); }
   setAgeBracket(bracket: "13_17" | "18_plus") { return this.rpc<null>("set_age_bracket", { p_bracket: bracket }); }
