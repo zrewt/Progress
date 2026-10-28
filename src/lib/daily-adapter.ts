@@ -91,7 +91,8 @@ export function dailyPlanFromTree(
 ): DailyPlan {
   const budget = budgetOf(answers);
   const theme = detectTheme(answers.goal);
-  const mainBranch = theme.primary.branch;
+  const mainBranch = source === "edge-ai" && tree.primaryBranch && tree.pillars.some((p) => p.pillar === tree.primaryBranch && p.nodes.length > 0)
+    ? tree.primaryBranch : theme.primary.branch;
 
   // The curated plan is both the base for narrative fields and the fallback.
   const base = buildPlan({
@@ -120,8 +121,9 @@ export function dailyPlanFromTree(
     const built = entry?.nodes?.length
       ? practiceFromNodes(entry.nodes, pillar.id, role, budget, entry.easy)
       : null;
-    if (built) drafted.add(pillar.id);
-    return built ?? base.practices.find((practice) => practice.branch === pillar.id);
+    if (built && !entry?.localRepair) drafted.add(pillar.id);
+    const fallback = base.practices.find((practice) => practice.branch === pillar.id);
+    return built ?? (fallback ? { ...fallback, role, cadence: role === "primary" ? "daily" : "weekly" } : undefined);
   }).filter((practice): practice is PracticeDraft => Boolean(practice));
 
   // Roles are assigned by branch so a fallback practice cannot create a second
@@ -139,18 +141,27 @@ export function dailyPlanFromTree(
   // template, still labelled as drafted, with nothing on screen saying so.
   const repaired = normalised.map((practice) =>
     validatePractice(practice, budget).length
-      ? base.practices.find((item) => item.branch === practice.branch) ?? practice
+      ? { ...(base.practices.find((item) => item.branch === practice.branch) ?? practice), role: practice.role, cadence: practice.cadence }
       : practice,
   );
   const fromDraft = repaired.filter(
     (practice, index) => drafted.has(practice.branch) && practice === normalised[index],
   ).length;
+  // A partly repaired branch can still contain AI text alongside its local text.
+  const partiallyDrafted = repaired.some((practice, index) =>
+    practice === normalised[index] && tree.pillars.some((entry) => entry.pillar === practice.branch && entry.localRepair && entry.hasAiContent),
+  );
+  const containsLocalRepair = repaired.some((practice, index) =>
+    practice !== normalised[index] || !drafted.has(practice.branch),
+  );
+  const containsAi = fromDraft > 0 || partiallyDrafted;
 
   const candidate: DailyPlan = {
     ...base,
     // Where the plan came from is the source of the tree, not how much of it
     // survived: an on-device tree is local even when all four branches are used.
-    plan_source: fromDraft > 0 && source === "edge-ai" ? "ai" : "local",
+    plan_source: source !== "edge-ai" || !containsAi ? "local" : containsLocalRepair ? "mixed" : "ai",
+    personalization_context: answers.context ?? [],
     branch_labels: labels,
     practices: repaired,
   };
@@ -159,7 +170,7 @@ export function dailyPlanFromTree(
     // Visible in the Metro logs, so "the plan looks like a template" can be told
     // apart from "the draft was thrown away" without guessing.
     console.warn("[plan] the drafted plan could not be saved as written:", problems);
-    return { ...base, plan_source: "local", branch_labels: labels };
+    return { ...base, plan_source: "local", personalization_context: answers.context ?? [], branch_labels: labels };
   }
   if (fromDraft < repaired.length) {
     console.warn(`[plan] ${repaired.length - fromDraft} branch(es) fell back to the curated library`);
@@ -223,7 +234,8 @@ export function planFromSeason(snapshot: DailySnapshot, seasonId: string): Daily
     blocker: season.blocker,
     minutes_budget: season.minutes_budget,
     plan_version: season.plan_version,
-    plan_source: season.plan_source,
+    plan_source: season.plan_source_verified ? season.plan_source : "unknown",
+    personalization_context: season.personalization_context ?? [],
     plan_summary: season.plan_summary,
     safety_note: season.safety_note,
     branch_labels: season.branch_labels,

@@ -6,7 +6,9 @@ import { useGame, planVersionOf } from "../lib/game-context";
 import { dailyPlanFromTree, planFromSeason } from "../lib/daily-adapter";
 import { generateTree } from "../lib/gemini";
 import { planHistory } from "../lib/engine/history";
-import { detectTheme, BUDGETS, type Budget } from "../lib/plans";
+import { assessGoalSafety } from "../lib/safety";
+import { BUDGETS, type Budget } from "../lib/plans";
+import type { DailyPlan } from "../lib/daily-types";
 import type { OnboardingAnswers } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { PrimaryButton, QuietButton } from "./Controls";
@@ -62,9 +64,10 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
   const [goal, setGoal] = useState(plan?.goal ?? "");
   const [budget, setBudget] = useState<Budget>((plan?.minutes_budget ?? 15) as Budget);
   const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<DailyPlan | null>(null);
   if (!visible || !plan || !today) return null;
-  const theme = detectTheme(goal);
-  const valid = goal.trim().length >= 3 && goal.trim().length <= 140;
+  const safety = assessGoalSafety(goal);
+  const valid = goal.trim().length >= 3 && goal.trim().length <= 140 && safety.safe;
 
   async function save() {
     if (!plan) return;
@@ -78,49 +81,65 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
         goal,
         blocker: plan.blocker,
         timeBudget: String(budget),
+        context: plan.personalization_context ?? [],
       };
       const built = await generateTree(answers, { allowAi: aiAllowed, history: planHistory(snapshot) });
       const next = dailyPlanFromTree(answers, built.tree, built.source);
-      const saved = await editPlan({ ...next, plan_version: plan.plan_version + 1 });
-      if (saved) onClose();
+      setDraft({ ...next, plan_version: plan.plan_version + 1 });
     } finally {
       setBusy(false);
     }
   }
 
+  async function approve() {
+    if (!draft) return;
+    setBusy(true);
+    try {
+      if (await editPlan(draft)) { setDraft(null); onClose(); }
+    } finally { setBusy(false); }
+  }
+
   return (
-    <SheetFrame title="Edit your plan" onClose={onClose}>
+    <SheetFrame title="Edit your plan" onClose={() => { setDraft(null); onClose(); }}>
       <Body style={styles.lead}>
         Changing the goal or the daily size starts a new version. Everything you have already done stays in your history.
       </Body>
       <Label style={{ marginTop: 6 }}>Your 30-day goal</Label>
       <TextInput
         value={goal}
-        onChangeText={setGoal}
+        onChangeText={(value) => { setGoal(value); setDraft(null); }}
         maxLength={140}
         accessibilityLabel="Your 30-day goal"
         selectionColor={colors.copper}
         style={styles.input}
       />
+      {!safety.safe ? <Body>{safety.reason}</Body> : null}
       <Label style={{ marginTop: 16 }}>Minutes a day</Label>
-      <BudgetChips value={budget} onChange={setBudget} />
+      <BudgetChips value={budget} onChange={(value) => { setBudget(value); setDraft(null); }} />
       <Micro style={{ marginTop: 10, textTransform: "none", letterSpacing: 0.3 }}>
-        This reads as a {theme.label.toLowerCase()} plan. Every version fits inside {budget} minutes.
+        Generate a draft, then review and approve it before your plan changes.
       </Micro>
-      <PrimaryButton
-        label={busy ? "Saving" : "Save this version"}
+      {draft ? <View style={{ gap: 8, marginTop: 12 }}>
+        <Label>{draft.plan_source === "ai" ? "AI draft" : draft.plan_source === "mixed" ? "AI and starter practices" : "Starter plan"}</Label>
+        <Body>{draft.plan_summary}</Body>
+        {draft.practices.map((practice) => <Body key={practice.branch}>{practice.role === "primary" ? "Daily" : "Weekly"}: {practice.title} — {practice.why}{"\n"}{practice.full_variant.steps.join("\n")}</Body>)}
+        <PrimaryButton label="Approve this plan" onPress={() => void approve()} loading={busy} disabled={busy || authBusy} />
+        <QuietButton label="Try another draft" onPress={() => void save()} disabled={busy || authBusy} />
+      </View> : <PrimaryButton
+        label={busy ? "Building" : "Generate a draft"}
         onPress={() => void save()}
         loading={busy}
         disabled={!valid || busy || authBusy}
         style={{ marginTop: 18 }}
-      />
+      />}
     </SheetFrame>
   );
 }
 
 export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { today, snapshot, finishSeason, submitOnboarding, authBusy } = useGame();
+  const { today, snapshot, finishSeason, authBusy, aiAllowed } = useGame();
   const [newGoalOpen, setNewGoalOpen] = useState(false);
+  const [nextPlan, setNextPlan] = useState<DailyPlan | null>(null);
   const [goal, setGoal] = useState("");
   const [budget, setBudget] = useState<Budget>(15);
   const [busy, setBusy] = useState(false);
@@ -131,6 +150,7 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
   const total = snapshot.milestones.filter((milestone) => milestone.season_id === today.season.id).length;
   const practiced = progress?.practiced_days ?? 0;
   const seasonXp = progress?.season_xp ?? 0;
+  const safety = assessGoalSafety(goal);
 
   async function keepGoing() {
     if (!plan) return;
@@ -143,20 +163,22 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
   async function beginNew() {
     if (!plan) return;
     setBusy(true);
-    // Through the generator, so the new season is written for the new goal rather
-    // than rebuilt from the shared library. Starting a season archives the old one.
-    await submitOnboarding({
-      identity: plan.identity,
-      goal: goal.trim(),
-      blocker: plan.blocker,
-      timeBudget: String(budget),
-    });
-    setBusy(false);
-    onClose();
+    try {
+      const answers: OnboardingAnswers = { identity: plan.identity, goal: goal.trim(), blocker: plan.blocker, timeBudget: String(budget) };
+      const built = await generateTree(answers, { allowAi: aiAllowed, history: planHistory(snapshot) });
+      setNextPlan(dailyPlanFromTree(answers, built.tree, built.source));
+    } finally { setBusy(false); }
+  }
+
+  async function approveNew() {
+    if (!nextPlan) return;
+    setBusy(true);
+    try { if (await finishSeason(nextPlan)) { setNextPlan(null); onClose(); } }
+    finally { setBusy(false); }
   }
 
   return (
-    <SheetFrame title="Your season so far" onClose={onClose}>
+    <SheetFrame title="Your season so far" onClose={() => { setNextPlan(null); onClose(); }}>
       <Body style={styles.lead}>
         Season {today.season.plan_version > 1 ? `${today.season.plan_version}` : ""} ends here. Nothing is lost when you close it.
       </Body>
@@ -184,7 +206,7 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
           <Label>What is the next 30 days about?</Label>
           <TextInput
             value={goal}
-            onChangeText={setGoal}
+            onChangeText={(value) => { setGoal(value); setNextPlan(null); }}
             maxLength={140}
             placeholder="One clear change"
             placeholderTextColor={colors.sageDeep}
@@ -192,19 +214,23 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
             accessibilityLabel="New goal"
             style={styles.input}
           />
+          {!safety.safe ? <Body>{safety.reason}</Body> : null}
           <Label style={{ marginTop: 14 }}>Minutes a day</Label>
-          <BudgetChips value={budget} onChange={setBudget} />
-          <Micro style={{ marginTop: 10, textTransform: "none", letterSpacing: 0.3 }}>
-            This reads as a {detectTheme(goal).label.toLowerCase()} plan.
-          </Micro>
-          <PrimaryButton
-            label={busy ? "Beginning" : "Begin a new 30 days"}
+          <BudgetChips value={budget} onChange={(value) => { setBudget(value); setNextPlan(null); }} />
+          {nextPlan ? <View style={{ gap: 8, marginTop: 12 }}>
+            <Label>{nextPlan.plan_source === "ai" ? "AI draft" : nextPlan.plan_source === "mixed" ? "AI and starter practices" : "Starter plan"}</Label>
+            <Body>{nextPlan.plan_summary}</Body>
+            {nextPlan.practices.map((practice) => <Body key={practice.branch}>{practice.role === "primary" ? "Daily" : "Weekly"}: {practice.title} — {practice.why}{"\n"}{practice.full_variant.steps.join("\n")}</Body>)}
+            <PrimaryButton label="Approve and begin" onPress={() => void approveNew()} loading={busy} disabled={busy || authBusy} />
+            <QuietButton label="Try another draft" onPress={() => void beginNew()} disabled={busy || authBusy} />
+          </View> : <PrimaryButton
+            label={busy ? "Building" : "Generate a draft"}
             onPress={() => void beginNew()}
             loading={busy}
-            disabled={busy || authBusy || goal.trim().length < 3}
+            disabled={busy || authBusy || goal.trim().length < 3 || !safety.safe}
             style={{ marginTop: 16 }}
-          />
-          <QuietButton label="Back" onPress={() => setNewGoalOpen(false)} disabled={busy} />
+          />}
+          <QuietButton label="Back" onPress={() => { setNextPlan(null); setNewGoalOpen(false); }} disabled={busy} />
         </>
       ) : (
         <>

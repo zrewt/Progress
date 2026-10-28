@@ -5,11 +5,10 @@ import {
   sanitizeGeneratedNode,
   scrubGoalForPrivacy,
 } from "./safety";
-import { getSupabase } from "./supabase";
-import { validatePracticeText } from "./safety-rules";
-import { detectTheme } from "./plans";
+import { validatePracticeText, validateStepsWithinBudget } from "./safety-rules";
+import type { Practice, PracticeDraft } from "./daily-types";
 import { fallbackReason, type FallbackReason } from "./engine/fallback";
-import { startingPointFor } from "./engine/stage";
+import { GENERAL_QUESTIONS, validateQuestions } from "../../supabase/functions/generate-tree/questions";
 import type {
   BlockerId,
   GeneratedEasy,
@@ -19,6 +18,7 @@ import type {
   OnboardingAnswers,
   PillarId,
   PlanHistory,
+  PersonalizationQuestion,
 } from "./types";
 
 export { fallbackReason };
@@ -860,17 +860,20 @@ export function normalizeTree(
   answers: OnboardingAnswers,
 ): GeneratedTree {
   const fallback = buildSeedPlan(answers);
-  if (!raw || typeof raw !== "object") return fallback;
+  if (!raw || typeof raw !== "object") return { ...fallback, pillars: fallback.pillars.map((pillar) => ({ ...pillar, localRepair: true, hasAiContent: false })) };
 
   const root = raw as {
+    primaryBranch?: unknown;
     summary?: unknown;
     safetyNote?: unknown;
     pillars?: unknown;
   };
   const list = Array.isArray(root.pillars) ? root.pillars : null;
-  if (!list) return fallback;
+  if (!list) return { ...fallback, pillars: fallback.pillars.map((pillar) => ({ ...pillar, localRepair: true, hasAiContent: false })) };
 
   return {
+    primaryBranch: typeof root.primaryBranch === "string" && PILLARS.some((p) => p.id === root.primaryBranch)
+      ? root.primaryBranch as PillarId : undefined,
     summary: asString(root.summary, fallback.summary).slice(0, 220),
     safetyNote: asString(root.safetyNote, fallback.safetyNote).slice(0, 180),
     pillars: PILLARS.map((meta) => {
@@ -885,14 +888,23 @@ export function normalizeTree(
       }) as Record<string, unknown> | undefined;
 
       const rawNodes = Array.isArray(entry?.nodes) ? entry!.nodes : [];
+      let localRepair = !entry;
+      let hasAiContent = false;
       const nodes: GeneratedNode[] = [];
       for (let tier = 0; tier < 4; tier += 1) {
         const candidate = rawNodes[tier] as Record<string, unknown> | undefined;
         const base = fallbackBranch.nodes[tier];
         if (!candidate || typeof candidate !== "object") {
+          localRepair = true;
           nodes.push(base);
           continue;
         }
+        const safeCandidate = validatePracticeText(`${String(candidate.title ?? "")} ${String(candidate.description ?? "")} ${Array.isArray(candidate.instructions) ? candidate.instructions.join(" ") : ""}`).ok;
+        if (![candidate.title, candidate.duration, candidate.description].every((value) => typeof value === "string" && value.trim()) ||
+            !Array.isArray(candidate.instructions) || candidate.instructions.filter((value) => typeof value === "string" && value.trim()).length < 2 || !safeCandidate) {
+          localRepair = true;
+        }
+        if (safeCandidate) hasAiContent = true;
         const rawCandidate: GeneratedNode = {
           title: asString(candidate.title, base.title),
           duration: asString(candidate.duration, base.duration),
@@ -911,6 +923,8 @@ export function normalizeTree(
           48,
         ),
         easy: asEasy(entry?.easy),
+        localRepair,
+        hasAiContent,
         nodes,
       };
     }),
@@ -943,13 +957,63 @@ async function functionFailure(
   }
 }
 
+export type QuestionResult =
+  | { questions: PersonalizationQuestion[]; source: "ai" }
+  | { questions: PersonalizationQuestion[]; source: "general"; reason: "off" | "consent" | "limit" | "unavailable" | "invalid" | "outdated" };
+
+/** Recognize older functions that return a plan instead of the requested questions. */
+export function questionResponse(data: unknown): QuestionResult {
+  const questions = validateQuestions(data);
+  if (questions) return { questions, source: "ai" };
+  const isTree = !!data && typeof data === "object" && Array.isArray((data as { pillars?: unknown }).pillars);
+  return { questions: GENERAL_QUESTIONS, source: "general", reason: isTree ? "outdated" : "invalid" };
+}
+
+export async function generateQuestions(answers: OnboardingAnswers, allowAi: boolean): Promise<QuestionResult> {
+  if (!allowAi) return { questions: GENERAL_QUESTIONS, source: "general", reason: "off" };
+  const { getSupabase } = await import("./supabase");
+  const sb = getSupabase();
+  if (sb && assessGoalSafety(answers.goal).safe) {
+    try {
+      const { data, error } = await sb.functions.invoke("generate-tree", {
+        body: { mode: "questions", goal: scrubGoalForPrivacy(answers.goal), identity: answers.identity, blocker: answers.blocker, timeBudget: answers.timeBudget },
+      });
+      if (!error) return questionResponse(data);
+      const failure = await functionFailure(error);
+      const reason = fallbackReason(error, true, failure.code);
+      return { questions: GENERAL_QUESTIONS, source: "general", reason: reason === "consent" || reason === "limit" ? reason : "unavailable" };
+    } catch {
+      // General questions remain available when the service cannot be reached.
+    }
+  }
+  return { questions: GENERAL_QUESTIONS, source: "general", reason: "unavailable" };
+}
+
+export async function suggestReviewPractice(answers: OnboardingAnswers, practice: Practice, note: string, practiced: number, allowAi: boolean): Promise<PracticeDraft | null> {
+  const { getSupabase } = await import("./supabase");
+  const sb = getSupabase();
+  if (!sb || !allowAi || !assessGoalSafety(answers.goal).safe) return null;
+  try {
+    const { data, error } = await sb.functions.invoke("generate-tree", { body: {
+      mode: "review", goal: scrubGoalForPrivacy(answers.goal), identity: answers.identity, blocker: answers.blocker, timeBudget: answers.timeBudget,
+      context: (answers.context ?? []).map(({ question, answer }) => ({ question: scrubGoalForPrivacy(question), answer: scrubGoalForPrivacy(answer) })),
+      review: { current: scrubGoalForPrivacy(`${practice.title}: ${practice.full_variant.steps.join(" ")}`), note: scrubGoalForPrivacy(note), practiced },
+    } });
+    const s = data?.suggestion;
+    if (error || !s || typeof s.title !== "string" || !s.title.trim() || s.title.length > 70 || typeof s.why !== "string" || !s.why.trim() || s.why.length > 200 || typeof s.easyTitle !== "string" || !s.easyTitle.trim() || s.easyTitle.length > 70 || !Array.isArray(s.steps) || !Array.isArray(s.easySteps) || s.steps.length < 1 || s.steps.length > 5 || s.easySteps.length < 1 || s.easySteps.length > 3 || [...s.steps, ...s.easySteps].some((v) => typeof v !== "string" || !v.trim() || v.length > 180)) return null;
+    const budget = Number(answers.timeBudget);
+    if (!validatePracticeText(`${s.title} ${s.why} ${s.easyTitle} ${s.steps.join(" ")} ${s.easySteps.join(" ")}`).ok || !validateStepsWithinBudget(s.steps, budget).ok || !validateStepsWithinBudget(s.easySteps, 2).ok) return null;
+    return { branch: practice.branch, role: practice.role, cadence: practice.cadence, cadence_n: practice.cadence_n, title: s.title, why: s.why, full_variant: { title: s.title, minutes: budget, steps: s.steps }, easy_variant: { title: s.easyTitle, minutes: 2, steps: s.easySteps } };
+  } catch { return null; }
+}
+
 /**
  * Generates a personalized Starting Seed Plan.
  *
  * Security: Never uses a client-side Gemini API key. Instead, it invokes the
  * Supabase `generate-tree` Edge Function (where GEMINI_API_KEY lives in
- * server secrets) and falls back to the goal-tailored Starting Seed Engine
- * when the Edge Function isn't deployed yet.
+ * server secrets) and returns the local starter when the Edge Function fails.
+ * Callers must identify that starter and let the person choose whether to use it.
  */
 export async function generateTree(
   answers: OnboardingAnswers,
@@ -963,6 +1027,7 @@ export async function generateTree(
     );
   }
 
+  const { getSupabase } = await import("./supabase");
   const sb = getSupabase();
   let reason: FallbackReason = "off";
   let detail: string | undefined;
@@ -976,16 +1041,11 @@ export async function generateTree(
           blocker: answers.blocker,
           timeBudget: answers.timeBudget,
           history: options.history ?? null,
-          // What the goal is actually about, so the model does not plan the
-          // person's own habits when they asked to build something.
-          focus: detectTheme(answers.goal).label,
-          branch: detectTheme(answers.goal).primary.branch,
-          // Whether anything already exists changes what week 1 must be.
-          startingPoint: startingPointFor(answers.goal),
+          context: (answers.context ?? []).map(({ question, answer }) => ({ question: scrubGoalForPrivacy(question), answer: scrubGoalForPrivacy(answer) })),
         },
       });
 
-      if (!error && data && typeof data === "object") {
+      if (!error && data && typeof data === "object" && Array.isArray(data.pillars) && data.pillars.length > 0) {
         return {
           tree: normalizeTree(data, answers),
           source: "edge-ai",

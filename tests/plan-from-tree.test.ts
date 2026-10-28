@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { dailyPlanFromTree } from "../src/lib/daily-adapter";
 import { validatePlan } from "../src/lib/plans";
+import { generateQuestions, normalizeTree, questionResponse } from "../src/lib/gemini";
+import { GENERAL_QUESTIONS, validateQuestions } from "../supabase/functions/generate-tree/questions";
 import type { GeneratedNode, GeneratedTree, OnboardingAnswers, PillarId } from "../src/lib/types";
 
 const answers: OnboardingAnswers = {
@@ -205,7 +207,7 @@ test("one branch that breaks the budget is repaired without losing the rest of t
   assert.equal(craft?.title, "craft step for the tracking app");
   assert.ok(body?.title);
   assert.notEqual(body?.full_variant.steps[0], "Walk for 20 minutes and think about the app.");
-  assert.equal(plan.plan_source, "ai");
+  assert.equal(plan.plan_source, "mixed");
   assert.deepEqual(validatePlan(plan), []);
 });
 
@@ -224,6 +226,46 @@ test("a draft that cannot be repaired says plainly that it is local", () => {
   const plan = dailyPlanFromTree(answers, unusable, "edge-ai");
   assert.equal(plan.plan_source, "local");
   assert.deepEqual(validatePlan(plan), []);
+});
+
+test("normalization reports AI text mixed with local repairs", () => {
+  const raw = tree({ pillars: (["body", "mind", "craft", "connection"] as PillarId[]).map(fourWeeks) });
+  raw.pillars[0].nodes[1].title = "";
+  const plan = dailyPlanFromTree(answers, normalizeTree(raw, answers), "edge-ai");
+  assert.equal(plan.plan_source, "mixed");
+});
+
+test("an entirely local normalized fallback is never marked AI", () => {
+  const plan = dailyPlanFromTree(answers, normalizeTree(null, answers), "edge-ai");
+  assert.equal(plan.plan_source, "local");
+});
+
+test("the AI primary branch overrides the keyword classifier", () => {
+  const raw = tree({ primaryBranch: "body" });
+  const plan = dailyPlanFromTree({ ...answers, goal: "improve my tennis" }, raw, "edge-ai");
+  assert.equal(plan.practices.find((p) => p.role === "primary")?.branch, "body");
+});
+
+test("question validation limits shape, duplicates and sensitive questions", () => {
+  assert.ok(validateQuestions({ questions: GENERAL_QUESTIONS }));
+  assert.equal(validateQuestions({ questions: Array(4).fill(GENERAL_QUESTIONS[0]) }), null);
+  assert.equal(validateQuestions({ questions: [{ question: "What is your medical diagnosis?", options: ["One", "Two"] }] }), null);
+  assert.equal(validateQuestions({ questions: [{ question: "What tools can you use?", options: ["Wall", "wall"] }] }), null);
+  assert.equal(validateQuestions({ questions: [] }), null);
+});
+
+test("question responses distinguish an outdated plan-only backend from valid questions", () => {
+  const valid = { questions: [{ question: "What climbing experience do you have?", options: ["None", "Some", "Other", "Skip"] }] };
+  const result = questionResponse(valid);
+  assert.equal(result.source, "ai");
+  assert.deepEqual(result.questions[0].options, ["None", "Some"]);
+  assert.equal(questionResponse({ pillars: [] }).source, "general");
+  assert.deepEqual(questionResponse({ pillars: [] }), { questions: GENERAL_QUESTIONS, source: "general", reason: "outdated" });
+  assert.deepEqual(questionResponse({ questions: [{ question: "What is your medical diagnosis?", options: ["One", "Two"] }] }), { questions: GENERAL_QUESTIONS, source: "general", reason: "invalid" });
+});
+
+test("AI-off questions do not contact the backend", async () => {
+  assert.deepEqual(await generateQuestions(answers, false), { questions: GENERAL_QUESTIONS, source: "general", reason: "off" });
 });
 
 test("the on-device plan is labelled local and is built the same way", () => {

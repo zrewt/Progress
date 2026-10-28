@@ -13,7 +13,8 @@ advertising, no analytics SDK, and no selling of data.
 | Time zone | Turns a moment into the right local day for streaks and reviews. | `profiles.timezone` |
 | Practices and plan text | What the plan promised, kept so a relaunch shows the same plan. | `seasons`, `practices`, `plan_versions` |
 | Practice events: full/easy/skip/rest, time, effort 1–5 (optional), note up to 280 characters | Progress, streaks, milestones, weekly reviews, undo. | `completion_events` |
-| Weekly review difficulty and note (optional) | Adapts the next week. | `weekly_reviews` |
+| Weekly review difficulty and note (optional) | Helps propose an adaptation for the next week. | `weekly_reviews` |
+| Optional personalization questions and answers | Inform the current season and later suggestions. | `seasons.personalization_context`, initially also in `plan_versions.snapshot` |
 | AI consent version and time | Proves permission was given before any AI call. | `profiles.ai_consent_version/at` |
 | Daily generation counter | Stops runaway model spend. | `generation_usage` |
 | Legacy XP grant | Preserves progress earned before seasons existed. | `legacy_xp_grants` |
@@ -24,15 +25,18 @@ updating this document and the consent screen.
 
 ## AI
 
-- Only the goal text, identity, time budget and blocker are sent, and only after the user
-  accepts the consent screen. Consent version and time are stored.
-- Emails, phone numbers and @handles are removed automatically before sending. This is
-  redaction, not anonymisation; the rest of the text is sent as written.
+- With consent, the goal, identity, time budget and blocker are sent. When a previous
+  season has activity, a small progress summary, practice titles and the latest review
+  note may also be sent. Individual completion notes are not sent.
+- With consent, optional personalization answers are sent when drafting or revising a plan,
+  or proposing a weekly practice change. A weekly proposal also sends the current practice,
+  the review note and the number of practiced days. Users should avoid sensitive health information.
+- Emails, phone numbers and @handles are removed automatically before sending free text.
+  This is redaction, not anonymisation; other details may still identify a person.
 - The server forwards the text to Google Gemini. Keys live in Supabase secrets and are
   never in the app bundle.
-- Declining consent does not remove any feature: the same curated plan library builds the
-  plan on the device. Consent can be withdrawn in settings at any time, which stops all
-  further AI calls.
+- Declining or withdrawing consent prevents further AI requests; a curated starter plan
+  can be built on the device instead. It is not as personalized as an AI plan.
 
 ## Storage and retention
 
@@ -41,6 +45,10 @@ updating this document and the consent screen.
   functions; the client cannot edit XP, streaks or events directly.
 - History is kept for as long as the account exists. Nothing is silently expired; a user
   can archive a season, which retains it in their history.
+- Settings can change or remove the current season's saved answers. This also removes the
+  original answer fields from that season's plan-version snapshots. Existing plan text,
+  practice text or review notes may still reflect details previously supplied; editing
+  answers alone does not rewrite or delete those records.
 - Migrated legacy rows (`profiles`, `nodes`) are retained read-only for rollback and are
   not shown as separate history.
 

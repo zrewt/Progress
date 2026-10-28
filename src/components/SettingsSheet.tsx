@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import type { PersonalizationAnswer } from "../lib/types";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
 import { useGame } from "../lib/game-context";
@@ -7,23 +8,44 @@ import { APP_VERSION, PRIVACY_URL, SUPPORT_URL } from "../lib/config";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { PrimaryButton, QuietButton } from "./Controls";
 import { Body, Display, Label, Micro } from "./Type";
+import { ConsentSheet } from "./ConsentSheet";
 
 export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const insets = useSafeAreaInsets();
-  const { snapshot, user, aiAllowed, recordConsent, withdrawConsent, setTimezone, signOut, deleteAccount } = useGame();
+  const { snapshot, user, aiAllowed, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext, signOut, deleteAccount } = useGame();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [editingContext, setEditingContext] = useState<PersonalizationAnswer[] | null>(null);
   if (!visible) return null;
   const timezone = snapshot?.profile?.timezone ?? "UTC";
   const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const activeSeason = snapshot?.seasons.find((season) => season.status === "active") ?? null;
 
   async function toggleAi() {
+    if (!aiAllowed) { setConsentOpen(true); return; }
     setBusy(true); setNotice(null);
-    const saved = aiAllowed ? await withdrawConsent() : await recordConsent();
+    const saved = await withdrawConsent();
     setBusy(false);
-    setNotice(saved ? (aiAllowed ? "AI suggestions are off. Plans are built on this device." : "AI suggestions are on. You can withdraw this any time.") : "That change could not be saved.");
+    setNotice(saved ? "AI suggestions are off. Plans are built on this device." : "That change could not be saved.");
+  }
+
+  async function acceptConsent() {
+    setBusy(true);
+    const saved = await recordConsent();
+    setBusy(false);
+    if (saved) { setConsentOpen(false); setNotice("AI suggestions are on. You can withdraw this any time."); }
+    else setNotice("That choice could not be saved.");
+  }
+
+  async function saveContext() {
+    if (!editingContext) return;
+    setBusy(true); setNotice(null);
+    const saved = await setPersonalizationContext(editingContext.filter((item) => item.answer.trim()).map((item) => ({ ...item, answer: item.answer.trim() })));
+    setBusy(false);
+    if (saved) { setEditingContext(null); setNotice("Your details were saved. Your existing practices are unchanged."); }
+    else setNotice("Your details could not be saved.");
   }
 
   async function applyDeviceZone() {
@@ -72,7 +94,7 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
               <Label>AI suggestions</Label>
               <Body style={{ fontSize: 12.5 }}>
                 {aiAllowed
-                  ? "On. Your goal, identity, time budget and blocker may be sent to draft suggestions. No name, email or history."
+                  ? "On. Your goal, optional answers and a short progress summary may be sent to draft suggestions."
                   : "Off. Plans are built on this device from the same curated practices."}
               </Body>
               <QuietButton label={aiAllowed ? "Turn AI suggestions off" : "Turn AI suggestions on"} onPress={() => void toggleAi()} disabled={busy} />
@@ -84,13 +106,16 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
               <View style={styles.block}>
                 <Label>This plan</Label>
                 <Body style={{ fontSize: 12.5 }}>
-                  {activeSeason.plan_source === "ai"
+                  {!activeSeason.plan_source_verified
+                    ? "This plan was created or edited before its exact source could be tracked. Its original source is not verified."
+                    : activeSeason.plan_source === "ai"
                     ? "Drafted by AI for your goal, then checked against the safety and time limits."
-                    : "Built on this device from the curated practices. No AI draft was used for it."}
+                    : activeSeason.plan_source === "mixed" ? "This plan combines AI suggestions and starter practices."
+                    : "Built on this device from the starter practices. No AI practices were used for it."}
                 </Body>
                 <Micro style={styles.muted}>
                   Plan version {activeSeason.plan_version}
-                  {activeSeason.plan_source === "ai"
+                  {activeSeason.plan_source_verified && activeSeason.plan_source === "ai"
                     ? ""
                     : aiAllowed
                       ? " — save a new version from Edit plan to ask the AI for a fresh draft."
@@ -99,6 +124,20 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
               </View>
             ) : null}
 
+            {activeSeason ? (
+              <View style={styles.block}>
+                <Label>Your plan details</Label>
+                <Body>Changing or removing details does not rewrite your existing plan. Answers may already be reflected in saved plan text.</Body>
+                {editingContext ? editingContext.map((item, index) => (
+                  <View key={`${index}-${item.question}`}>
+                    <Body>{item.question}</Body>
+                    <TextInput accessibilityLabel={item.question} value={item.answer} maxLength={160} onChangeText={(answer) => setEditingContext((old) => old?.map((entry, i) => i === index ? { ...entry, answer } : entry) ?? null)} style={styles.contextInput} />
+                  </View>
+                )) : (activeSeason.personalization_context ?? []).map((item, index) => <Body key={`${index}-${item.question}`}>{item.question} {item.answer}</Body>)}
+                {!editingContext && !(activeSeason.personalization_context ?? []).length ? <Body>No extra details saved for this season.</Body> : null}
+                {editingContext ? <><QuietButton label="Save details" onPress={() => void saveContext()} disabled={busy} /><QuietButton label="Cancel" onPress={() => setEditingContext(null)} disabled={busy} /></> : (activeSeason.personalization_context ?? []).length ? <QuietButton label="Change or remove details" onPress={() => setEditingContext((activeSeason.personalization_context ?? []).map((item) => ({ ...item })))} disabled={busy} /> : null}
+              </View>
+            ) : null}
             <View style={styles.block}>
               <Label>Help and privacy</Label>
               <Pressable onPress={() => void Linking.openURL(SUPPORT_URL)} accessibilityRole="link" accessibilityLabel="Open support page" style={styles.link}>
@@ -133,6 +172,7 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
           </ScrollView>
         </View>
       </View>
+      <ConsentSheet visible={consentOpen} busy={busy} onAccept={() => void acceptConsent()} onDecline={() => setConsentOpen(false)} />
     </Modal>
   );
 }
@@ -145,6 +185,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingBottom: 12, gap: 18 },
   block: { gap: 7, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: hairline },
   muted: { textTransform: "none", letterSpacing: 0.3 },
+  contextInput: { minHeight: 48, color: colors.bone, borderBottomWidth: 1, borderColor: hairline, fontFamily: fonts.sans, fontSize: 15 },
   link: { minHeight: 44, justifyContent: "center" },
   linkText: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.bone, textDecorationLine: "underline" },
   danger: { gap: 8, padding: 12, borderLeftWidth: 2, borderLeftColor: colors.clay, backgroundColor: alpha(colors.clay, 0.07) },

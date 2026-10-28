@@ -65,11 +65,15 @@ export interface Profile {
   seasonStartedAt: string | null;
 }
 
+export interface PersonalizationAnswer { question: string; answer: string }
+export interface PersonalizationQuestion { question: string; options: string[] }
+
 export interface OnboardingAnswers {
   identity: IdentityId;
   goal: string;
   blocker: BlockerId;
   timeBudget: string;
+  context?: PersonalizationAnswer[];
 }
 
 export interface GeneratedNode {
@@ -85,6 +89,7 @@ export interface GeneratedEasy {
 }
 
 export interface GeneratedTree {
+  primaryBranch?: PillarId;
   summary: string;
   safetyNote: string;
   pillars: {
@@ -92,6 +97,10 @@ export interface GeneratedTree {
     focus?: string;
     /** The model's own two-minute version of the branch's week-one practice. */
     easy?: GeneratedEasy;
+    /** True when normalization inserted any local text into this branch. */
+    localRepair?: boolean;
+    /** True when normalized nodes retain any model-written content. */
+    hasAiContent?: boolean;
     nodes: GeneratedNode[];
   }[];
 }

@@ -5,7 +5,7 @@
 export const APP_VERSION = "1.0.0";
 
 /** Bump when the consent wording changes; stored with the acceptance time. */
-export const AI_CONSENT_VERSION = "2026-10-ai-1";
+export const AI_CONSENT_VERSION = "2026-10-ai-2";
 
 /** Set to true when the Supabase project requires email confirmation. */
 export const EMAIL_VERIFICATION_REQUIRED = false;
@@ -22,11 +22,13 @@ export const AI_CONSENT_COPY = {
     "Your goal, in your own words",
     "The identity you chose",
     "Your daily time budget",
-    "What usually gets in the way",
+    "What usually gets in the way and any optional answers you provide",
+    "Practice titles, a short progress summary and review note when available",
+    "The current practice and your feedback when you request a weekly change",
   ],
-  notSent: ["Your name", "Your email", "Your progress and history"],
+  notSent: ["Your account name", "Your account email", "Individual completion notes"],
   detail:
-    "These four things go to our server and then to Google Gemini to draft suggestions. Emails, phone numbers and @handles are removed automatically first, but that is not full anonymisation — anything else you type is sent as written.",
+    "These details go to our server and Google Gemini to draft questions and suggestions. Optional answers are saved with your season; you can change or remove them in settings. Existing plan text may still reflect them. Avoid sensitive health details. Emails, phone numbers and @handles are removed before sending, but this is not full anonymisation.",
   alternative:
     "You can decline and still get a complete plan built on this device, using the same curated practices. You can change this later in settings.",
 } as const;

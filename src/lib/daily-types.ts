@@ -1,4 +1,4 @@
-import type { BlockerId, IdentityId, PillarId } from "./types";
+import type { BlockerId, IdentityId, PillarId, PersonalizationAnswer } from "./types";
 
 /** One week of a practice. Week 1 is the variant itself; later weeks are its ladder. */
 export interface Rung { title: string; minutes: number; steps: string[] }
@@ -24,13 +24,16 @@ export interface DailyPlan {
   blocker: BlockerId;
   minutes_budget: 5 | 15 | 30;
   plan_version: number;
-  plan_source: "ai" | "local";
+  plan_source: "ai" | "local" | "mixed" | "unknown";
+  personalization_context?: PersonalizationAnswer[];
   plan_summary: string;
   safety_note: string;
   branch_labels: Record<PillarId, string>;
   practices: PracticeDraft[];
 }
 export interface Season extends Omit<DailyPlan, "practices"> {
+  /** Older and individually edited plans have no reliable practice-level provenance. */
+  plan_source_verified?: boolean;
   id: string;
   user_id: string;
   started_on: string;

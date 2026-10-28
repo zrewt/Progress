@@ -27,7 +27,7 @@ import {
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGame } from "../lib/game-context";
-import { generateTree, type FallbackReason, type TreeResult } from "../lib/gemini";
+import { generateQuestions, generateTree, type FallbackReason, type QuestionResult, type TreeResult } from "../lib/gemini";
 import { dailyPlanFromTree } from "../lib/daily-adapter";
 import {
   BLOCKERS,
@@ -38,12 +38,12 @@ import {
 } from "../lib/pillars";
 import { assessGoalSafety } from "../lib/safety";
 import { planHistory } from "../lib/engine/history";
-import type { BlockerId, IdentityId, OnboardingAnswers } from "../lib/types";
+import type { BlockerId, IdentityId, OnboardingAnswers, PersonalizationQuestion } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { BotanicalBranch } from "./BotanicalBranch";
 import { ConsentSheet } from "./ConsentSheet";
 import { BrandMark } from "./BrandMark";
-import { Field, PrimaryButton, Rule } from "./Controls";
+import { Field, PrimaryButton, QuietButton, Rule } from "./Controls";
 import { PillarIcon } from "./PillarIcon";
 import { Body, Breathe, Display, DisplayItalic, Label, Micro } from "./Type";
 
@@ -71,6 +71,12 @@ const STEPS = [
   },
   {
     key: "04",
+    label: "Your situation",
+    question: "Make it yours.",
+    helper: "Choose an answer, write your own, or skip. Avoid sensitive health details.",
+  },
+  {
+    key: "05",
     label: "The seed plan",
     question: "Your first plan.",
     helper:
@@ -331,6 +337,9 @@ export function Onboarding() {
     blocker: "consistency",
   });
   const [preview, setPreview] = useState<TreeResult | null>(null);
+  const [questions, setQuestions] = useState<PersonalizationQuestion[]>([]);
+  const [questionResult, setQuestionResult] = useState<QuestionResult | null>(null);
+  const [responses, setResponses] = useState<string[]>([]);
   // Asked once, before the first question, so the plan appears the moment the
   // last answer is given instead of interrupting the payoff with a decision.
   const [consentOpen, setConsentOpen] = useState(!aiAllowed);
@@ -357,7 +366,7 @@ export function Onboarding() {
   const previewPlan =
     preview && answers.identity && answers.goal && answers.timeBudget
       ? dailyPlanFromTree(
-          { identity: answers.identity, goal: answers.goal, blocker: answers.blocker ?? "consistency", timeBudget: answers.timeBudget },
+          { identity: answers.identity, goal: answers.goal, blocker: answers.blocker ?? "consistency", timeBudget: answers.timeBudget, context: questions.flatMap((q, i) => responses[i]?.trim() ? [{ question: q.question, answer: responses[i].trim() }] : []) },
           preview.tree,
           preview.source,
         )
@@ -370,7 +379,7 @@ export function Onboarding() {
         ? goal.length >= 3 && safety.safe && Boolean(answers.blocker)
         : step === 2
           ? Boolean(answers.timeBudget)
-          : Boolean(preview);
+          : step === 3 ? true : Boolean(preview);
 
   function chooseIdentity(identity: IdentityId) {
     setPreview(null);
@@ -390,7 +399,19 @@ export function Onboarding() {
       goal: goal.slice(0, 120),
       blocker: (answers.blocker as BlockerId) ?? "consistency",
       timeBudget: overrideBudget ?? answers.timeBudget ?? "15",
+      context: questions.flatMap((q, i) => responses[i]?.trim() ? [{ question: q.question, answer: responses[i].trim() }] : []),
     };
+  }
+
+  async function loadQuestions() {
+    setGenerating(true);
+    try {
+      const result = await generateQuestions(fullAnswers(), allowAi ?? aiAllowed);
+      setQuestions(result.questions);
+      setQuestionResult(result);
+      setResponses([]);
+      setStep(3);
+    } finally { setGenerating(false); }
   }
 
   async function handleContinue() {
@@ -402,13 +423,14 @@ export function Onboarding() {
     if (step === 2) {
       // The choice was made up front, and an unanswered sheet can only be
       // dismissed into the on-device plan, so no AI call can precede a decision.
-      await buildPreview(allowAi ?? aiAllowed);
+      await loadQuestions();
       return;
     }
-    if (step === 3 && preview) {
+    if (step === 3) { await buildPreview(allowAi ?? aiAllowed); return; }
+    if (step === 4 && preview) {
       // A plan the model did not write is not silently accepted: the main action
       // becomes one more attempt, and using the starter plan is its own choice.
-      if (preview.source === "seed-engine" && aiAllowed) {
+      if (previewPlan?.plan_source === "local" && (allowAi ?? aiAllowed)) {
         await buildPreview(true);
         return;
       }
@@ -435,7 +457,7 @@ export function Onboarding() {
         history: planHistory(snapshot),
       });
       setPreview(built);
-      setStep(3);
+      setStep(4);
     } finally {
       setGenerating(false);
     }
@@ -490,13 +512,13 @@ export function Onboarding() {
 
         <View style={styles.stepRow}>
           <Micro>
-            {current.key} <Text style={{ color: colors.sageDeep }}>/ 04</Text>
+            {current.key} <Text style={{ color: colors.sageDeep }}>/ 05</Text>
           </Micro>
           <Text style={styles.stepLabel}>{current.label}</Text>
         </View>
         <View style={styles.progressTrack}>
           <View
-            style={[styles.progressFill, { width: `${((step + 1) / 4) * 100}%` }]}
+            style={[styles.progressFill, { width: `${((step + 1) / 5) * 100}%` }]}
           />
         </View>
 
@@ -643,21 +665,37 @@ export function Onboarding() {
               ))
             : null}
 
-          {step === 3 && preview && previewPlan ? (
+          {step === 3 ? (
+            <View style={{ gap: 20 }}>
+              <Body>{questionResult?.source === "ai" ? "Questions tailored to your goal" : questionResult?.reason === "off" ? "AI is off, so these are general questions." : questionResult?.reason === "outdated" ? "General questions: the server returned a plan instead of questions. The question feature may not be deployed yet." : questionResult?.reason === "consent" ? "General questions: AI permission could not be confirmed." : questionResult?.reason === "limit" ? "General questions: today's AI request limit was reached." : questionResult?.reason === "invalid" ? "General questions: the AI response could not be used safely." : "General questions: tailored questions could not be generated right now."}</Body>
+              {questionResult?.source === "general" && questionResult.reason !== "off" ? <QuietButton label="Try tailored questions again" onPress={() => void loadQuestions()} disabled={generating || authBusy} /> : null}
+              {questions.map((item, index) => (
+                <View key={`${index}-${item.question}`} style={{ gap: 8 }}>
+                  <Label>{item.question}</Label>
+                  <View style={styles.goalChips}>
+                    {item.options.map((option) => <GoalChip key={option} label={option} selected={responses[index] === option} onSelect={() => setResponses((old) => { const next = [...old]; next[index] = option; return next; })} />)}
+                    <GoalChip label="Skip" selected={responses[index] === ""} onSelect={() => setResponses((old) => { const next = [...old]; next[index] = ""; return next; })} />
+                  </View>
+                  <Field label="Or write your own answer" accessibilityLabel={`Your answer: ${item.question}`} value={item.options.includes(responses[index]) ? "" : responses[index] ?? ""} onChangeText={(text) => setResponses((old) => { const next = [...old]; next[index] = text; return next; })} maxLength={160} placeholder="Optional" />
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {step === 4 && preview && previewPlan ? (
             <View style={styles.previewWrap}>
               <View style={styles.previewSummaryCard}>
                 <View style={styles.previewBadgeRow}>
                   <Micro style={{ color: colors.copperLight }}>
-                    {preview.source === "edge-ai" ? "Drafted with AI" : "Starter plan"}
+                    {previewPlan.plan_source === "ai" ? "Drafted with AI" : previewPlan.plan_source === "mixed" ? "AI and starter practices" : "Starter plan"}
                   </Micro>
                   <Micro style={{ color: colors.lichen }}>4 practices</Micro>
                 </View>
                 <Text style={styles.previewSummaryText}>{previewPlan.plan_summary}</Text>
-                {preview.source === "seed-engine" ? (
+                {previewPlan.plan_source === "local" && (allowAi ?? aiAllowed) ? (
                   <View style={styles.starterCard}>
                     <Text style={styles.starterTitle}>This is not an AI plan</Text>
                     <Text style={styles.starterBody}>
-                      {FALLBACK_COPY[preview.reason ?? "unavailable"]}
+                      {preview.source === "seed-engine" ? FALLBACK_COPY[preview.reason ?? "unavailable"] : "The AI draft could not be used safely, so this starter plan was built on this device."}
                     </Text>
                     {preview.detail ? (
                       <Text style={styles.starterDetail}>{preview.detail}</Text>
@@ -752,9 +790,9 @@ export function Onboarding() {
           <PrimaryButton
             label={
               step === 2
-                ? "Build my plan"
-                : step === 3
-                  ? preview?.source === "seed-engine" && aiAllowed
+                ? "Continue"
+                : step === 3 ? "Build my plan" : step === 4
+                  ? previewPlan?.plan_source === "local" && (allowAi ?? aiAllowed)
                     ? "Try the AI again"
                     : "Grow my tree"
                   : "Continue"

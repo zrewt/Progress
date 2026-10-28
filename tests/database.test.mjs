@@ -23,6 +23,8 @@ async function rpc(db,name,args=[]){ return (await db.query(`select public.${nam
 test('daily database: migrations, backfill, atomic retries, undo, boundaries, archive and RLS', async(t)=>{
  const db=await setup(); t.after(()=>db.close()); await asUser(db);
  const original=(await db.query('select * from public.seasons')).rows[0];
+ assert.equal(original.plan_source_verified,false, 'legacy source must not claim verified provenance');
+ assert.deepEqual(original.personalization_context,[]);
  await t.test('backfill preserves exact XP and original rows, marks inferred dates',async()=>{
   assert.equal((await rpc(db,'get_progress',[original.id])).xp,150);
   assert.equal((await db.query('select * from public.nodes')).rows.length,2);
@@ -73,6 +75,33 @@ test('daily database: migrations, backfill, atomic retries, undo, boundaries, ar
   assert.notEqual(next,season);assert.equal((await rpc(db,'get_progress',[next])).xp,150);
   assert.equal((await db.query('select * from public.seasons')).rows.length,3);
  });
+});
+
+test('personalization is saved, owner-scoped and removable without changing plan history', async(t)=>{
+ const db=await setup(); t.after(()=>db.close()); await asUser(db);
+ const context=[{question:'What can you use?',answer:'A wall, no partner'}];
+ const personalized={...plan,plan_source:'mixed',personalization_context:context};
+ const season=await rpc(db,'start_next_season',[personalized,'UTC','Player','archived']);
+ let row=(await db.query('select plan_source,plan_source_verified,personalization_context from public.seasons where id=$1',[season])).rows[0];
+ assert.equal(row.plan_source,'mixed'); assert.equal(row.plan_source_verified,true); assert.deepEqual(row.personalization_context,context);
+ await asUser(db,B);
+ assert.equal((await db.query('select * from public.seasons where id=$1',[season])).rows.length,0);
+ await assert.rejects(()=>rpc(db,'set_personalization_context',[season,[]]));
+ await asUser(db);
+ await assert.rejects(()=>rpc(db,'set_personalization_context',[season,null]));
+ await assert.rejects(()=>rpc(db,'set_personalization_context',[season,Array(4).fill(context[0])]));
+ await rpc(db,'update_plan',[season,{...personalized,goal:'Write a daily journal'}]);
+ await rpc(db,'set_personalization_context',[season,[]]);
+ row=(await db.query('select personalization_context from public.seasons where id=$1',[season])).rows[0];
+ assert.deepEqual(row.personalization_context,[]);
+ const versions=(await db.query('select snapshot from public.plan_versions where season_id=$1',[season])).rows;
+ assert.equal(versions.length,2); assert.ok(versions.every(v=>!('personalization_context' in v.snapshot)));
+ const target=(await db.query('select * from public.practices where season_id=$1 and active order by sort_order limit 1',[season])).rows[0];
+ await rpc(db,'replace_practice',[season,target.id,{...target,title:'A replacement'}]);
+ assert.equal((await db.query('select plan_source_verified from public.seasons where id=$1',[season])).rows[0].plan_source_verified,false);
+ const continuation=await rpc(db,'start_next_season',[{...plan,plan_source:'unknown'},'UTC','Player','completed']);
+ const continued=(await db.query('select plan_source,plan_source_verified from public.seasons where id=$1',[continuation])).rows[0];
+ assert.equal(continued.plan_source,'unknown'); assert.equal(continued.plan_source_verified,false);
 });
 
 test('weekly review, plan edits and replacement keep history intact', async(t)=>{

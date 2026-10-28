@@ -13,7 +13,7 @@ import { parseRecoveryLink } from "./auth-links";
 import { deviceQueue } from "./offline-store";
 import { enqueue, replay } from "./offline-queue";
 import type { DailyPlan, DailySnapshot, EventInput, SeasonHistoryEntry } from "./daily-types";
-import type { AppUser, AuthResult, Celebration, GeneratedTree, OnboardingAnswers, Profile, TreeNode } from "./types";
+import type { AppUser, AuthResult, Celebration, GeneratedTree, OnboardingAnswers, PersonalizationAnswer, Profile, TreeNode } from "./types";
 
 interface PendingUndo { eventId: string; label: string; kind: "counted" | "rest" | "skipped" }
 interface GameContextValue {
@@ -40,6 +40,7 @@ interface GameContextValue {
   recordConsent: () => Promise<boolean>;
   withdrawConsent: () => Promise<boolean>;
   setTimezone: (timezone: string) => Promise<boolean>;
+  setPersonalizationContext: (context: PersonalizationAnswer[]) => Promise<boolean>;
   requestPasswordReset: (email: string) => Promise<AuthResult>;
   resendConfirmation: (email: string) => Promise<AuthResult>;
   updatePassword: (password: string) => Promise<AuthResult>;
@@ -220,7 +221,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   async function submitOnboarding(answers: OnboardingAnswers, built?: { tree: GeneratedTree; source: TreeSource }) {
     const token = scope.token();
     // A finished season is the best briefing the generator can get.
-    const result = built ?? await generateTree(answers, { history: planHistory(snapshot) });
+    const result = built ?? await generateTree(answers, { allowAi: Boolean(snapshot?.profile?.ai_consent_at) && snapshot?.profile?.ai_consent_version === AI_CONSENT_VERSION, history: planHistory(snapshot) });
     if (!scope.isCurrent(token)) return;
     await startSeason(dailyPlanFromTree(answers, result.tree, result.source));
   }
@@ -319,6 +320,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     try { await data.setTimezone(timezone); if (!scope.isCurrent(token)) return false; await retryLoad(); return true; }
     catch { if (scope.isCurrent(token)) setError("That time zone could not be saved. Try again."); return false; }
   }
+  async function setPersonalizationContext(context: PersonalizationAnswer[]) {
+    if (!data || !currentUser.current || !activeSeason || loadFailed) return false;
+    const token = scope.token();
+    try { await data.setPersonalizationContext(activeSeason.id, context); if (!scope.isCurrent(token)) return false; await retryLoad(); return true; }
+    catch { if (scope.isCurrent(token)) setError("Your details could not be saved. Please try again."); return false; }
+  }
   async function requestPasswordReset(email: string): Promise<AuthResult> {
     if (!sb) return { error: "Account access isn’t configured yet." };
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return { error: "Enter the email address on your account." };
@@ -359,12 +366,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const clearError = useCallback(() => setError(null), []);
   const value: GameContextValue = {
     loading: sb ? loading : false, authBusy, cloudEnabled: isSupabaseConfigured(), user, profile, nodes,
-    treeSource: activeSeason?.plan_source === "ai" ? "edge-ai" : "seed-engine",
+    treeSource: !activeSeason?.plan_source_verified ? null : activeSeason.plan_source === "ai" ? "edge-ai" : activeSeason.plan_source === "local" ? "seed-engine" : null,
     snapshot, today, loadFailed, error, celebration, undoOffer, history,
     aiAllowed: Boolean(snapshot?.profile?.ai_consent_at) && snapshot?.profile?.ai_consent_version === AI_CONSENT_VERSION,
     recovering, queueCount, syncState, syncNow,
     signIn, signUp, signOut, retryLoad, submitOnboarding, startSeason, recordEvent, undoEvent, dismissUndo,
-    editPlan, replacePractice, submitReview, finishSeason, loadHistory, recordConsent, withdrawConsent, setTimezone,
+    editPlan, replacePractice, submitReview, finishSeason, loadHistory, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext,
     requestPasswordReset, resendConfirmation, updatePassword, cancelRecovery, deleteAccount, completeNode, dismissCelebration, clearError,
   };
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

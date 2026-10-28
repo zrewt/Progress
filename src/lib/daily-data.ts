@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PersonalizationAnswer } from "./types";
 import type { DailyPlan, DailySnapshot, EventInput, CompletionEvent, Progress, Season, SeasonHistoryEntry, WeeklyReview, PracticeDraft } from "./daily-types";
 
 export class AccountScope {
@@ -60,4 +61,5 @@ export class DailyData {
   recordConsent(version: string) { return this.rpc<null>("record_ai_consent", { p_version: version }); }
   withdrawConsent() { return this.rpc<null>("withdraw_ai_consent", {}); }
   setTimezone(timezone: string, name?: string | null) { return this.rpc<null>("update_preferences", { p_timezone: timezone, p_display_name: name ?? null }); }
+  setPersonalizationContext(seasonId: string, context: PersonalizationAnswer[]) { return this.rpc<null>("set_personalization_context", { p_season_id: seasonId, p_context: context }); }
 }

@@ -2,23 +2,48 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useGame } from "../lib/game-context";
 import { adherenceFor, reviewDecision, reviewProposal, weekLabel } from "../lib/review";
+import { suggestReviewPractice } from "../lib/gemini";
+import type { PracticeDraft } from "../lib/daily-types";
 import { alpha, colors, fonts } from "../theme";
 import { PrimaryButton, QuietButton } from "./Controls";
 import { Body, Display, Label, Micro } from "./Type";
 
 export function WeekReviewCard() {
-  const { today, snapshot, submitReview } = useGame();
+  const { today, snapshot, submitReview, replacePractice, aiAllowed } = useGame();
   const [difficulty, setDifficulty] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState<PracticeDraft | null>(null);
 
   if (!today?.reviewWeek || dismissed) return null;
   const week = today.reviewWeek;
   const { practiced, adherence } = adherenceFor(snapshot?.events ?? [], week);
   const proposal = decision ? reviewProposal(decision as "lighter" | "same" | "harder") : null;
+
+  async function propose() {
+    if (!today || !difficulty) return;
+    setBusy(true); setFailure(null);
+    setDecision(reviewDecision(adherence, difficulty));
+    if (aiAllowed && note.trim()) {
+      const season = today.season;
+      const draft = await suggestReviewPractice({ identity: season.identity, goal: season.goal, blocker: season.blocker, timeBudget: String(season.minutes_budget), context: season.personalization_context ?? [] }, today.primary, note, practiced, true);
+      setSuggestion(draft);
+      if (!draft) setFailure("A suggested change was unavailable. You can keep your current practice.");
+    }
+    setBusy(false);
+  }
+
+  async function acceptSuggestion() {
+    if (!today || !suggestion) return;
+    setBusy(true); setFailure(null);
+    const replaced = await replacePractice(today.primary.id, suggestion);
+    setBusy(false);
+    if (replaced) { setSuggestion(null); setFailure("Practice changed. Save your review below."); }
+    else setFailure("The practice could not be changed. Your plan is unchanged.");
+  }
 
   async function apply() {
     if (!decision) return;
@@ -42,9 +67,16 @@ export function WeekReviewCard() {
             <Display style={styles.proposalTitle}>{proposal.title}</Display>
             <Text style={styles.proposalBody}>{proposal.detail}</Text>
           </View>
+          {suggestion ? <View style={styles.proposal}>
+            <Body>Current: {today.primary.title}{"\n"}{today.primary.full_variant.steps.join("\n")}</Body>
+            <Body>Suggested: {suggestion.title}{"\n"}{suggestion.why}</Body>
+            {suggestion.full_variant.steps.map((step, index) => <Body key={index}>{step}</Body>)}
+            <QuietButton label="Use suggested practice" onPress={() => void acceptSuggestion()} disabled={busy} />
+            <QuietButton label="Keep current practice" onPress={() => setSuggestion(null)} disabled={busy} />
+          </View> : null}
           {failure ? <Text style={styles.failure} accessibilityRole="alert">{failure}</Text> : null}
           <PrimaryButton label={proposal.confirm} onPress={() => void apply()} loading={busy} disabled={busy} />
-          <QuietButton label="Go back" onPress={() => setDecision(null)} disabled={busy} />
+          <QuietButton label="Go back" onPress={() => { setSuggestion(null); setDecision(null); }} disabled={busy} />
         </>
       ) : (
         <>
@@ -73,7 +105,7 @@ export function WeekReviewCard() {
             value={note}
             onChangeText={setNote}
             maxLength={280}
-            placeholder="Anything the week taught you? Optional."
+            placeholder="What made this easier or harder? Avoid sensitive health details."
             placeholderTextColor={colors.sageDeep}
             selectionColor={colors.copper}
             accessibilityLabel="Weekly review note"
@@ -81,8 +113,9 @@ export function WeekReviewCard() {
           />
           <PrimaryButton
             label="See what fits next week"
-            onPress={() => difficulty && setDecision(reviewDecision(adherence, difficulty))}
-            disabled={!difficulty}
+            onPress={() => void propose()}
+            loading={busy}
+            disabled={!difficulty || busy}
           />
           <Pressable onPress={() => setDismissed(true)} accessibilityRole="button" accessibilityLabel="Review later" style={styles.later}>
             <Text style={styles.laterText}>Not now</Text>
