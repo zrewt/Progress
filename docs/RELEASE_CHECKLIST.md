@@ -9,7 +9,11 @@ For a project that has applied none of the new schema, paste
 `supabase/apply_all_stages.sql` into the SQL editor once. It is all eight files below, merged
 in filename order, wrapped in a single transaction — apply it as one unit and do not split it.
 On a project that has already applied some migrations, do **not** run the whole bundle: the
-first "already exists" aborts the transaction, so apply only the newer files, in order.
+first "already exists" aborts the transaction, so apply only the newer files, in order. For the
+common case (the old four-file setup plus personalization is already applied),
+`supabase/apply_remaining.sql` is that single paste: migrations 6–8 in one transaction. Its
+header carries a read-only query that reports which of the three parts are still missing;
+all zero means run it, and anything already present means run only the file that is missing.
 
 1. `202610250001_daily_loop.sql` — seasons, practices, milestones, events, legacy grants, RPCs.
 2. `202610250002_backfill.sql` — converts existing profiles/nodes into a first season; preserves XP as a one-time grant and marks inferred dates.
@@ -20,13 +24,14 @@ first "already exists" aborts the transaction, so apply only the newer files, in
 7. `202610270002_safety.sql` — age bracket, conservative mode, goal category, pain handling, signup age trigger.
 8. `202610280001_midweek_adaptation.sql` — owner-only `set_lighter_week` used by the mid-week offer.
 
-`apply_all_stages.sql` is generated from the migration files, so it must not be edited by hand.
-`tests/sql-bundle.test.mjs` fails when it drifts from the migrations, and applies the whole
-bundle to an empty embedded Postgres (PGlite) to prove it runs, then confirms a second run
-aborts without undoing the first. The rest of the suite runs every migration file in filename
-order, covering backfill XP preservation, idempotent retry, denied direct XP writes, plan
-versions, weekly adaptation, consent, quota, two-user isolation, target dates, signup age and
-the mid-week lighter week.
+Both bundles are generated from the migration files, so neither must be edited by hand.
+`tests/sql-bundle.test.mjs` fails when either drifts (a missing, duplicated or reordered
+migration), applies `apply_all_stages.sql` to an empty embedded Postgres (PGlite), and applies
+`apply_remaining.sql` on top of migrations 1–5 to reproduce a live project upgraded in place.
+Each test then confirms a second run aborts without undoing the first. The rest of the suite
+runs every migration file in filename order, covering backfill XP preservation, idempotent
+retry, denied direct XP writes, plan versions, weekly adaptation, consent, quota, two-user
+isolation, target dates, signup age and the mid-week lighter week.
 
 Before applying:
 - Take a database backup and record its location.
