@@ -36,7 +36,7 @@ export function nextReminder(snapshot: DailySnapshot, time: string, now = new Da
     if (!at || at <= now) continue;
     const week = planWeek(season.started_on, date, season.season_length_days);
     const practice = detailFor(snapshot, season, primary, week).practice;
-    const title = rungFor(practice.full_variant, week).title;
+    const title = season.progression_paused ? practice.easy_variant.title : rungFor(practice.full_variant, week).title;
     return { date, at, title, daysRemaining: daysBetween(date, season.ends_on) };
   }
   return null;

@@ -31,6 +31,8 @@ export interface DailyPlan {
   plan_version: number;
   plan_source: "ai" | "local" | "mixed" | "unknown";
   personalization_context?: PersonalizationAnswer[];
+  conservative_mode?: boolean;
+  goal_category?: "ordinary" | "physical" | "high-risk";
   target_date?: string | null;
   season_length_days?: number | null;
   stages?: PlanStage[];
@@ -48,6 +50,7 @@ export interface Season extends Omit<DailyPlan, "practices"> {
   started_on: string;
   ends_on: string;
   status: "active" | "completed" | "archived";
+  progression_paused?: boolean;
   week_mode: "same" | "lighter";
   week_mode_until: string | null;
   created_at: string;
@@ -85,6 +88,7 @@ export interface Practice extends PracticeDraft {
 }
 export type EventKind = "full" | "easy" | "skipped" | "rest";
 export interface CompletionEvent {
+  something_hurt?: boolean;
   id: string;
   user_id: string;
   season_id: string;
@@ -122,6 +126,8 @@ export interface Progress {
   unlocked_milestones: string[];
 }
 export interface DailyProfile {
+  age_bracket?: "13_17" | "18_plus" | null;
+  conservative_mode?: boolean;
   id: string;
   display_name: string | null;
   timezone: string;
@@ -140,6 +146,7 @@ export interface DailySnapshot {
   progress: Progress | null;
 }
 export interface EventInput {
+  something_hurt?: boolean;
   season_id: string;
   practice_id: string | null;
   kind: EventKind;

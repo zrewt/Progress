@@ -18,6 +18,39 @@ export interface GoalSafety {
   support?: "self-harm" | "recovery";
 }
 
+export type GoalCategory = "ordinary" | "physical" | "high-risk";
+/** Conservative flags only add restrictions; an AI result cannot remove one. */
+export function classifyGoal(goal: string, aiFlag?: GoalCategory): GoalCategory {
+  const creation = /\b(build|make|create|design|write|develop|launch)\b/i.test(goal) && /\b(app|website|book|novel|podcast|software|game)\b/i.test(goal) && !/\b(and|also|then)\b/i.test(goal);
+  const high = !creation && /\b(climb\w*|mountaineer\w*|matterhorn|everest|div(?:e|es|er|ers|ing)|scuba|ultramarathon|ultra-endurance|triathlon|ironman|marathon|skydiv\w*|parachut\w*|base jump\w*)\b/i.test(goal);
+  const physical = !creation && /\b(run\w*|jog\w*|walk\w*|tennis|swim\w*|cycl\w*|bike|fitness|exercise|workout|strength|lift\w*|sport\w*|football|soccer|basketball|hike|hiking|yoga|gym)\b/i.test(goal);
+  return high || aiFlag === "high-risk" ? "high-risk" : physical || aiFlag === "physical" ? "physical" : "ordinary";
+}
+export function safetyInstructions(category: GoalCategory, conservative: boolean): string {
+  return `${category === "high-risk" ? "Preparation only. Get qualified instruction. Never provide routes, climbing/diving techniques, equipment selection or equipment safety instructions. Limit actions to finding qualified instruction, confirming prerequisites with that professional and nontechnical preparation." : ""} ${conservative ? "Conservative mode: gentle progression only, no extreme physical actions. For physical goals recommend a trusted adult when under 18 and qualified professional guidance. Never infer medical details." : ""}`;
+}
+export function safeForCategory(text: string, category: GoalCategory): boolean {
+  if (!validatePracticeText(text).ok) return false;
+  return category !== "high-risk" || !/\b(hornli|hörnli|summit route|climb the|rope up|tie (?:a |the )?knot|belay|rappel|abseil|crampon|oxygen tank|decompression|dive to|ascend to|descend to|harness|carabiner)\b/i.test(text);
+}
+export function requiresPreparation(category: GoalCategory, conservative: boolean): boolean {
+  return category === "high-risk" || (category === "physical" && conservative);
+}
+/** Conservative physical plans use nontechnical preparation, not unverified exercise prescriptions. */
+export function preparationTree<T extends { pillars: { pillar: string; nodes: unknown[] }[] }>(tree: T): T {
+  const actions: Record<string, [string, string, string]> = {
+    craft: ["Find qualified instruction", "Find the contact page of a qualified instructor for this goal.", "Write one question about suitable supervised preparation."],
+    body: ["Plan a rest window", "Choose a comfortable rest window in your calendar.", "Leave that window free from physical training."],
+    mind: ["Prepare a prerequisite question", "Write down what you do not yet know about supervised prerequisites.", "Save that question for a qualified professional, without trying the activity."],
+    connection: ["Identify a support person", "Write the name of a trusted adult or support person you could ask for help.", "Draft a short request for help finding qualified guidance."],
+  };
+  return { ...tree, primaryBranch: "craft", safetyNote: "Preparation only. Get qualified instruction before physical activity. Involve a trusted adult if you are under 18.", pillars: tree.pillars.map(p => {
+    const [title, first, second] = actions[p.pillar] ?? actions.craft;
+    return { ...p, focus: "Nontechnical preparation", localRepair: true, hasAiContent: false, nodes: p.nodes.map((_, i) => ({ title, duration: "2 min", description: "Start with qualified guidance, not a self-directed physical activity.", instructions: i ? [second, first] : [first, second], easy: { title, steps: [first] } })) };
+  }) };
+}
+export const PAIN_MESSAGE = "Stop and rest for now. If pain continues, contact a qualified health professional. The next practice will use the easy version.";
+
 export const NEEDS_REVIEW = true;
 
 export const CRISIS_RESOURCES = {

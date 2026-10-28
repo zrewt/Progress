@@ -5,7 +5,7 @@ import {
   sanitizeGeneratedNode,
   scrubGoalForPrivacy,
 } from "./safety";
-import { validatePracticeText, validateStepsWithinBudget } from "./safety-rules";
+import { classifyGoal, preparationTree, requiresPreparation, safeForCategory, validatePracticeText, validateStepsWithinBudget } from "./safety-rules";
 import type { Practice, PracticeDraft } from "./daily-types";
 import { stageRanges } from "./engine/schedule";
 import { addDays } from "./progression";
@@ -800,7 +800,7 @@ export function buildSeedPlan(answers: OnboardingAnswers): GeneratedTree {
   const templates = templatesForTheme(theme, safeGoal);
   const antiBlockerInstruction = blockerStep(answers.blocker);
 
-  return {
+  const result: GeneratedTree = {
     summary: `Your next ${answers.daysRemaining ?? 30} days: ${safeGoal}. One ${answers.timeBudget}-minute practice a day, plus three lighter ones across the week, and a smaller version for the days it does not fit.`,
     stages: answers.legEnd && answers.daysRemaining ? stageRanges(addDays(answers.legEnd, -answers.daysRemaining), answers.daysRemaining).map((range, i) => ({ ...range, title: `Stage ${i + 1}`, outcome: "Review this part of your goal at the checkpoint." })) : undefined,
     realityCheck: answers.daysRemaining ? { level: "stretch", explanation: "This local starter cannot assess the deadline; review the first actions and adjust your goal or date if needed." } : undefined,
@@ -825,7 +825,11 @@ export function buildSeedPlan(answers: OnboardingAnswers): GeneratedTree {
       };
     }),
   };
+  return requiresPreparation(classifyGoal(answers.goal), !!answers.conservativeMode) ? preparationTree(result) : result;
 }
+
+
+
 
 function asString(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -878,7 +882,7 @@ export function normalizeTree(
   const list = Array.isArray(root.pillars) ? root.pillars : null;
   if (!list) return { ...fallback, pillars: fallback.pillars.map((pillar) => ({ ...pillar, localRepair: true, hasAiContent: false })) };
 
-  return {
+  const result: GeneratedTree = {
     primaryBranch: typeof root.primaryBranch === "string" && PILLARS.some((p) => p.id === root.primaryBranch)
       ? root.primaryBranch as PillarId : undefined,
     stages: Array.isArray(root.stages) ? root.stages as GeneratedTree["stages"] : fallback.stages,
@@ -938,7 +942,11 @@ export function normalizeTree(
       };
     }),
   };
+  return requiresPreparation(classifyGoal(answers.goal), !!answers.conservativeMode) ? preparationTree(result) : result;
 }
+
+
+
 
 /**
  * The function answers with a `code` as well as an error message. Reading it is
@@ -985,7 +993,7 @@ export async function generateQuestions(answers: OnboardingAnswers, allowAi: boo
   if (sb && assessGoalSafety(answers.goal).safe) {
     try {
       const { data, error } = await sb.functions.invoke("generate-tree", {
-        body: { mode: "questions", goal: scrubGoalForPrivacy(answers.goal), identity: answers.identity, blocker: answers.blocker, timeBudget: answers.timeBudget, targetDate: answers.targetDate, legEnd: answers.legEnd, daysRemaining: answers.daysRemaining },
+        body: { mode: "questions", goal: scrubGoalForPrivacy(answers.goal), identity: answers.identity, blocker: answers.blocker, timeBudget: answers.timeBudget, conservativeMode: answers.conservativeMode, targetDate: answers.targetDate, legEnd: answers.legEnd, daysRemaining: answers.daysRemaining },
       });
       if (!error) return questionResponse(data);
       const failure = await functionFailure(error);
@@ -1005,7 +1013,7 @@ export async function suggestWeeklyDetail(answers: OnboardingAnswers, seasonId: 
   if (!sb) return null;
   try {
     const { data, error } = await sb.functions.invoke("generate-tree", { body: { mode: "weekly", seasonId, effectiveWeek: week, expectedVersion: version, note: scrubGoalForPrivacy(note), difficulty } });
-    if (error || !validateWeeklyDraft(data, practices.map(p => ({ id: p.id, minutes: p.full_variant.minutes })), Number(answers.timeBudget))) return null;
+    if (error || !safeForCategory(JSON.stringify(data), classifyGoal(answers.goal)) || !validateWeeklyDraft(data, practices.map(p => ({ id: p.id, minutes: p.full_variant.minutes })), Number(answers.timeBudget))) return null;
     return data;
   } catch { return null; }
 }
@@ -1016,11 +1024,12 @@ export async function suggestReviewPractice(answers: OnboardingAnswers, practice
   if (!sb || !allowAi || !assessGoalSafety(answers.goal).safe) return null;
   try {
     const { data, error } = await sb.functions.invoke("generate-tree", { body: {
-      mode: "review", goal: scrubGoalForPrivacy(answers.goal), identity: answers.identity, blocker: answers.blocker, timeBudget: answers.timeBudget,
+      mode: "review", conservativeMode: answers.conservativeMode, goal: scrubGoalForPrivacy(answers.goal), identity: answers.identity, blocker: answers.blocker, timeBudget: answers.timeBudget,
       context: (answers.context ?? []).map(({ question, answer }) => ({ question: scrubGoalForPrivacy(question), answer: scrubGoalForPrivacy(answer) })),
       review: { current: scrubGoalForPrivacy(`${practice.title}: ${practice.full_variant.steps.join(" ")}`), note: scrubGoalForPrivacy(note), practiced },
     } });
     const s = data?.suggestion;
+    if (s && !safeForCategory(JSON.stringify(s), classifyGoal(answers.goal))) return null;
     if (error || !s || typeof s.title !== "string" || !s.title.trim() || s.title.length > 70 || typeof s.why !== "string" || !s.why.trim() || s.why.length > 200 || typeof s.easyTitle !== "string" || !s.easyTitle.trim() || s.easyTitle.length > 70 || !Array.isArray(s.steps) || !Array.isArray(s.easySteps) || s.steps.length < 1 || s.steps.length > 5 || s.easySteps.length < 1 || s.easySteps.length > 3 || [...s.steps, ...s.easySteps].some((v) => typeof v !== "string" || !v.trim() || v.length > 180)) return null;
     const budget = Number(answers.timeBudget);
     if (!validatePracticeText(`${s.title} ${s.why} ${s.easyTitle} ${s.steps.join(" ")} ${s.easySteps.join(" ")}`).ok || !validateStepsWithinBudget(s.steps, budget).ok || !validateStepsWithinBudget(s.easySteps, 2).ok) return null;
@@ -1063,13 +1072,13 @@ export async function generateTree(
           timeBudget: answers.timeBudget,
           history: options.history ?? null,
           context: (answers.context ?? []).map(({ question, answer }) => ({ question: scrubGoalForPrivacy(question), answer: scrubGoalForPrivacy(answer) })),
-          targetDate: answers.targetDate, legEnd: answers.legEnd, daysRemaining: answers.daysRemaining,
+          conservativeMode: answers.conservativeMode, targetDate: answers.targetDate, legEnd: answers.legEnd, daysRemaining: answers.daysRemaining,
         },
       });
 
       if (!error && data && typeof data === "object" && Array.isArray(data.pillars) && data.pillars.length > 0) {
         return {
-          tree: normalizeTree(data, answers),
+          tree: requiresPreparation(classifyGoal(answers.goal), !!answers.conservativeMode) ? preparationTree(normalizeTree(data, answers)) : normalizeTree(data, answers),
           source: "edge-ai",
         };
       }

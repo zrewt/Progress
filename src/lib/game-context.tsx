@@ -3,6 +3,7 @@ import { AppState, Linking } from "react-native";
 import type { User } from "@supabase/supabase-js";
 import * as Crypto from "expo-crypto";
 import type { WeeklyDraft } from "../../supabase/functions/generate-tree/plan-validation";
+import { eligibleAge, UNDER_13_MESSAGE, type AgeBracket } from "./age";
 import { generateTree, type TreeSource } from "./gemini";
 import { getSupabase, isSupabaseConfigured } from "./supabase";
 import { AccountScope, DailyData } from "./daily-data";
@@ -30,7 +31,8 @@ interface GameContextValue {
   queueCount: number; syncState: "idle" | "pending" | "syncing" | "error";
   syncNow: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<AuthResult>;
-  signUp: (name: string, email: string, password: string) => Promise<AuthResult>;
+  signUp: (name: string, email: string, password: string, bracket: AgeBracket | null) => Promise<AuthResult>;
+  setAgeBracket: (bracket: AgeBracket) => Promise<boolean>;
   signOut: () => Promise<void>; retryLoad: () => Promise<void>;
   submitOnboarding: (answers: OnboardingAnswers, pregenerated?: { tree: GeneratedTree; source: TreeSource }) => Promise<void>;
   startSeason: (plan: DailyPlan) => Promise<boolean>;
@@ -203,12 +205,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
     try { const result = await sb.auth.signInWithPassword({ email: email.trim(), password }); return result.error ? { error: "We couldn’t sign you in. Check your email and password, or confirm your email first." } : {}; }
     catch { return { error: "Check your connection and try again." }; } finally { setAuthBusy(false); }
   }
-  async function signUp(name: string, email: string, password: string): Promise<AuthResult> {
+  async function signUp(name: string, email: string, password: string, bracket: AgeBracket | null): Promise<AuthResult> {
     if (!sb) return { error: "Account access isn’t configured yet." };
+    if (!eligibleAge(bracket)) return { error: bracket === "under_13" ? UNDER_13_MESSAGE : "Choose your age bracket before creating an account." };
     if (!name.trim() || password.length < 6 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return { error: "Add your name, a valid email, and a password of at least six characters." };
     setAuthBusy(true);
-    try { const result = await sb.auth.signUp({ email: email.trim(), password, options: { data: { display_name: name.trim() } } }); return result.error ? { error: "We couldn’t create your account. Please try again." } : result.data.session ? {} : { info: "Check your inbox to confirm your email, then sign in." }; }
+    try { const result = await sb.auth.signUp({ email: email.trim(), password, options: { data: { display_name: name.trim(), age_bracket: bracket } } }); return result.error ? { error: "We couldn’t create your account. Please try again." } : result.data.session ? {} : { info: "Check your inbox to confirm your email, then sign in." }; }
     catch { return { error: "Check your connection and try again." }; } finally { setAuthBusy(false); }
+  }
+  async function setAgeBracket(bracket: AgeBracket) {
+    if (!data || !eligibleAge(bracket)) return false;
+    const token = scope.token();
+    try { await data.setAgeBracket(bracket); if (!scope.isCurrent(token)) return false; await retryLoad(); return true; }
+    catch { if (scope.isCurrent(token)) setError("Your age bracket could not be saved. Please try again."); return false; }
   }
   async function signOut() {
     remindersSuspended.current = true;
@@ -410,7 +419,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     snapshot, today, loadFailed, error, celebration, undoOffer, history,
     aiAllowed: Boolean(snapshot?.profile?.ai_consent_at) && snapshot?.profile?.ai_consent_version === AI_CONSENT_VERSION,
     recovering, reminderSetupPending, setReminderSetupPending, configureReminder, queueCount, syncState, syncNow,
-    signIn, signUp, signOut, retryLoad, submitOnboarding, startSeason, recordEvent, undoEvent, dismissUndo,
+    signIn, signUp, setAgeBracket, signOut, retryLoad, submitOnboarding, startSeason, recordEvent, undoEvent, dismissUndo,
     editPlan, replacePractice, acceptWeek, submitReview, finishSeason, loadHistory, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext,
     requestPasswordReset, resendConfirmation, updatePassword, cancelRecovery, deleteAccount, completeNode, dismissCelebration, clearError,
   };

@@ -20,6 +20,7 @@ import {
 } from "@expo-google-fonts/dm-mono";
 
 import { GameProvider, useGame } from "./src/lib/game-context";
+import { AgeChoice } from "./src/components/AgeChoice";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { Background } from "./src/components/Background";
 import { Celebration } from "./src/components/Celebration";
@@ -56,6 +57,8 @@ function Root() {
         </View>
       ) : !user ? (
         <AuthScreen />
+      ) : !snapshot?.profile?.age_bracket ? (
+        <AgeChoice />
       ) : !profile ? (
         <Onboarding />
       ) : reminderSetupPending ? (

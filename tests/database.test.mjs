@@ -10,7 +10,7 @@ export const plan = {
 };
 async function setup() {
  const db=await PGlite.create();
- await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$; grant usage on schema auth,public to authenticated,anon; grant execute on function auth.uid() to authenticated,anon; insert into auth.users values('${A}'),('${B}');`);
+ await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key,raw_user_meta_data jsonb not null default '{}'::jsonb); create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$; grant usage on schema auth,public to authenticated,anon; grant execute on function auth.uid() to authenticated,anon; insert into auth.users values('${A}'),('${B}');`);
  await db.exec(await readFile('supabase/schema.sql','utf8'));
  // Realistic baseline grants: policies alone do not grant privileges.
  await db.exec('grant all on public.profiles,public.nodes to authenticated;');
@@ -75,6 +75,39 @@ test('daily database: migrations, backfill, atomic retries, undo, boundaries, ar
   assert.notEqual(next,season);assert.equal((await rpc(db,'get_progress',[next])).xp,150);
   assert.equal((await db.query('select * from public.seasons')).rows.length,3);
  });
+});
+
+test('safety: signup trigger rejects missing and under-13 brackets and stores only eligible brackets', async(t)=>{
+ const db=await setup(); t.after(()=>db.close());
+ for(const metadata of [{},{age_bracket:'under_13'},{age_bracket:'invalid'}]) await assert.rejects(()=>db.query('insert into auth.users(id,raw_user_meta_data) values($1,$2)',[crypto.randomUUID(),metadata]));
+ const minor=crypto.randomUUID();
+ await db.query('insert into auth.users(id,raw_user_meta_data) values($1,$2)',[minor,{age_bracket:'13_17'}]);
+ const profile=(await db.query('select age_bracket,conservative_mode from public.profiles where id=$1',[minor])).rows[0];
+ assert.deepEqual(profile,{age_bracket:'13_17',conservative_mode:true});
+ await asUser(db,minor);
+ await assert.rejects(()=>rpc(db,'set_age_bracket',['18_plus']));
+ const sid=await rpc(db,'start_next_season',[{...plan,goal:'climb the Matterhorn'},'UTC','Climber','archived']);
+ assert.deepEqual((await db.query('select goal_category,conservative_mode from public.seasons where id=$1',[sid])).rows[0],{goal_category:'high-risk',conservative_mode:true});
+ await asUser(db,B); await rpc(db,'set_age_bracket',['18_plus']);
+ assert.equal((await db.query('select age_bracket from public.profiles where id=$1',[B])).rows[0].age_bracket,'18_plus');
+ await assert.rejects(()=>db.exec("update public.profiles set age_bracket='13_17'"));
+});
+
+test('safety: pain earns no growth, blocks full and weekly progression, requires an easy next practice', async(t)=>{
+ const db=await setup(); t.after(()=>db.close()); await asUser(db);
+ const sid=await rpc(db,'start_next_season',[plan,'UTC','Writer','archived']);
+ const pid=(await db.query('select id from public.practices where season_id=$1 order by sort_order limit 1',[sid])).rows[0].id;
+ const before=await rpc(db,'get_progress',[sid]); const id=crypto.randomUUID(); const at=new Date().toISOString();
+ const result=await rpc(db,'record_pain',[sid,pid,id,at]);
+ assert.equal(result.credited,false); assert.equal(result.event.something_hurt,true); assert.deepEqual(result.progress,before);
+ assert.equal((await db.query('select progression_paused from public.seasons where id=$1',[sid])).rows[0].progression_paused,true);
+ await assert.rejects(()=>rpc(db,'complete_practice',[sid,pid,'full',crypto.randomUUID(),at]));
+ const retry=await rpc(db,'record_pain',[sid,pid,id,at]); assert.equal(retry.event.id,result.event.id);
+ await asUser(db,B); await assert.rejects(()=>rpc(db,'record_pain',[sid,pid,crypto.randomUUID(),at])); await asUser(db);
+ await rpc(db,'complete_practice',[sid,pid,'easy',crypto.randomUUID(),at]);
+ assert.equal((await db.query('select progression_paused from public.seasons where id=$1',[sid])).rows[0].progression_paused,false);
+ await rpc(db,'record_pain',[sid,pid,id,at]);
+ assert.equal((await db.query('select progression_paused from public.seasons where id=$1',[sid])).rows[0].progression_paused,false,'retrying an old pain event must not pause progression again');
 });
 
 test('new target-date legs preserve legacy seasons and scale daily and weekly milestones', async(t)=>{

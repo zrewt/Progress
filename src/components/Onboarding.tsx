@@ -35,6 +35,7 @@ import {
   PILLAR_MAP,
   TIME_OPTIONS,
 } from "../lib/pillars";
+import { classifyGoal } from "../lib/safety-rules";
 import { assessGoalSafety } from "../lib/safety";
 import { planHistory } from "../lib/engine/history";
 import { planningLeg } from "../lib/engine/schedule";
@@ -340,6 +341,8 @@ export function Onboarding() {
   const [questions, setQuestions] = useState<PersonalizationQuestion[]>([]);
   const [questionResult, setQuestionResult] = useState<QuestionResult | null>(null);
   const [responses, setResponses] = useState<string[]>([]);
+  const [screening, setScreening] = useState<"yes" | "no" | null>(null);
+  const [screeningAccepted, setScreeningAccepted] = useState(false);
   const [targetDate, setTargetDate] = useState("");
   const [acceptFirstLeg, setAcceptFirstLeg] = useState(false);
   // Asked once, before the first question, so the plan appears the moment the
@@ -366,10 +369,12 @@ export function Onboarding() {
   const currentDate = localDate(new Date(), timezone);
   const leg = planningLeg(currentDate, targetDate, acceptFirstLeg);
   const safety = assessGoalSafety(goal);
+  const category = classifyGoal(goal);
+  const conservative = Boolean(snapshot?.profile?.conservative_mode) || screening === "yes" || category === "high-risk";
   const previewPlan =
     preview && answers.identity && answers.goal && answers.timeBudget
       ? dailyPlanFromTree(
-          { identity: answers.identity, goal: answers.goal, blocker: answers.blocker ?? "consistency", timeBudget: answers.timeBudget, context: questions.flatMap((q, i) => responses[i]?.trim() ? [{ question: q.question, answer: responses[i].trim() }] : []), ...(leg.kind === "valid" ? { targetDate: leg.target, legEnd: leg.end, daysRemaining: leg.length } : {}) },
+          { identity: answers.identity, goal: answers.goal, blocker: answers.blocker ?? "consistency", timeBudget: answers.timeBudget, conservativeMode: conservative, context: questions.flatMap((q, i) => responses[i]?.trim() ? [{ question: q.question, answer: responses[i].trim() }] : []), ...(leg.kind === "valid" ? { targetDate: leg.target, legEnd: leg.end, daysRemaining: leg.length } : {}) },
           preview.tree,
           preview.source,
         )
@@ -381,7 +386,7 @@ export function Onboarding() {
       : step === 1
         ? goal.length >= 3 && safety.safe && Boolean(answers.blocker) && leg.kind === "valid"
         : step === 2
-          ? Boolean(answers.timeBudget)
+          ? Boolean(answers.timeBudget) && (category === "ordinary" || screening === "no" || (screening === "yes" && screeningAccepted))
           : step === 3 ? true : Boolean(preview);
 
   function chooseIdentity(identity: IdentityId) {
@@ -391,6 +396,7 @@ export function Onboarding() {
 
   function fullAnswers(overrideBudget?: string): OnboardingAnswers {
     return {
+      conservativeMode: conservative,
       identity: answers.identity ?? "creator",
       goal: goal.slice(0, 120),
       blocker: (answers.blocker as BlockerId) ?? "consistency",
@@ -544,6 +550,7 @@ export function Onboarding() {
                   value={answers.goal ?? ""}
                   onChangeText={(text) => {
                     setPreview(null);
+                    setScreening(null); setScreeningAccepted(false);
                     setAnswers((value) => ({ ...value, goal: text }));
                   }}
                   placeholder="e.g. Speak up in class without overthinking"
@@ -635,6 +642,7 @@ export function Onboarding() {
             </View>
           ) : null}
 
+          {step === 2 && category !== "ordinary" ? <View style={{ gap: 12 }}><Label>Before a physical goal</Label><Body>Has a doctor ever advised you to limit exercise?</Body><Body>If you are unsure, check with a doctor before starting.</Body><QuietButton label={screening === "no" ? "Selected: No" : "No"} onPress={() => { setScreening("no"); setScreeningAccepted(false); }} /><QuietButton label={screening === "yes" ? "Selected: Yes" : "Yes"} onPress={() => { setScreening("yes"); setScreeningAccepted(false); }} />{screening === "yes" ? <><Body>Speak with a doctor first. You can go back or continue with gentler, non-extreme preparation. We save only the conservative-mode flag, not your answer.</Body><QuietButton label={screeningAccepted ? "Conservative mode selected" : "Continue in conservative mode"} onPress={() => setScreeningAccepted(true)} /><QuietButton label="Go back" onPress={() => setStep(1)} /></> : null}{snapshot?.profile?.age_bracket === "13_17" ? <Body>For physical goals, involve a trusted adult. Your plan will use gentler progression and no extreme physical actions.</Body> : null}{category === "high-risk" ? <Body>This plan covers preparation only. Get qualified instruction; the app does not provide routes, techniques or equipment safety advice.</Body> : null}</View> : null}
           {step === 2
             ? TIME_OPTIONS.map((option) => (
                 <ChoiceRow

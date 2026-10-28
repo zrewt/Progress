@@ -111,6 +111,11 @@ test("today respects the timezone, the lighter week and today's completion", () 
   assert.equal(view.welcomeBack, false);
 });
 
+test("pain pause selects the easy next practice independently of weekly mode", () => {
+  const view = todayState(snapshot({ seasons: [{ ...season, progression_paused: true }] }), new Date("2026-10-24T09:00:00Z"));
+  assert.equal(view?.easierByDefault, true);
+});
+
 test("a weekly support is due only once per week", () => {
   const support = practice("p2", "supporting", "body", "weekly");
   assert.equal(isSupportingDue(support, [], "2026-10-24"), true);

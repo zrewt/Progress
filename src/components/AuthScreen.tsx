@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowRight, Eye, EyeOff } from "lucide-react-native";
+import { AGE_OPTIONS, UNDER_13_MESSAGE, type AgeBracket } from "../lib/age";
 import { useGame } from "../lib/game-context";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { BotanicalBranch } from "./BotanicalBranch";
@@ -23,6 +24,7 @@ export function AuthScreen() {
   const { signIn, signUp, authBusy, requestPasswordReset, resendConfirmation } = useGame();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>("signin");
+  const [bracket, setBracket] = useState<AgeBracket | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,7 +38,7 @@ export function AuthScreen() {
     const result =
       tab === "signin"
         ? await signIn(email, password)
-        : await signUp(name, email, password);
+        : await signUp(name, email, password, bracket);
     if (result.error) setError(result.error);
     if (result.info) setInfo(result.info);
   }
@@ -142,6 +144,7 @@ export function AuthScreen() {
             />
           ) : null}
 
+          {tab === "signup" ? <View style={{ gap: 8 }}><Label>Age bracket</Label><Body>Only the bracket is stored, not your birthday. Age is self-declared.</Body>{AGE_OPTIONS.map(o => <Pressable key={o.value} onPress={() => setBracket(o.value)} accessibilityRole="radio" accessibilityState={{ checked: bracket === o.value }} style={styles.tab}><Body>{bracket === o.value ? "✓ " : ""}{o.label}</Body></Pressable>)}{bracket === "under_13" ? <Body>{UNDER_13_MESSAGE}</Body> : null}</View> : null}
           <Field
             label="Email"
             value={email}

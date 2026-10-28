@@ -5,6 +5,7 @@ import { Check, Clock, Feather, X } from "lucide-react-native";
 import type { Practice } from "../lib/daily-types";
 import { useGame } from "../lib/game-context";
 import { PILLAR_MAP } from "../lib/pillars";
+import { PAIN_MESSAGE } from "../lib/safety-rules";
 import { SKIP_REASONS, EFFORT_LABELS } from "../lib/today";
 import { ladderWeeks, rungFor } from "../lib/engine/week";
 import { alternativesFor, practiceDraft, type Budget } from "../lib/plans";
@@ -53,7 +54,8 @@ export function PracticeSheet({
   // The practice keeps its identity; the week decides how far it goes today.
   const week = today?.week ?? 1;
   const weeks = ladderWeeks(practice.full_variant);
-  const variant = easy ? practice.easy_variant : rungFor(practice.full_variant, week);
+  const painPaused = !!today?.season.progression_paused;
+  const variant = easy || painPaused ? practice.easy_variant : rungFor(practice.full_variant, week);
   const pillar = PILLAR_MAP[practice.branch];
   const budget = (today?.season.minutes_budget ?? 15) as Budget;
   const inUse = (snapshot?.practices ?? [])
@@ -67,7 +69,7 @@ export function PracticeSheet({
     const saved = await recordEvent({
       season_id: today.season.id,
       practice_id: practice!.id,
-      kind: easy ? "easy" : "full",
+      kind: easy || painPaused ? "easy" : "full",
       minutes_actual: variant.minutes,
       effort: effort ?? undefined,
       note: note.trim() ? note.trim() : undefined,
@@ -83,6 +85,14 @@ export function PracticeSheet({
     const saved = await recordEvent({ season_id: today.season.id, practice_id: practice!.id, kind: "skipped", note: (reason ?? note.trim()) || undefined });
     setBusy(false);
     if (saved) onClose();
+  }
+
+  async function hurt() {
+    if (!today) return;
+    setFailure(PAIN_MESSAGE); setBusy(true);
+    const saved = await recordEvent({ season_id: today.season.id, practice_id: practice!.id, kind: "skipped", something_hurt: true });
+    setBusy(false);
+    if (!saved) setFailure(`${PAIN_MESSAGE} Your entry could not be saved; please retry.`);
   }
 
   async function rest() {
@@ -121,6 +131,7 @@ export function PracticeSheet({
 
             <Display style={styles.title}>{variant.title}</Display>
             <Body style={styles.why}>{practice.why}</Body>
+            {painPaused ? <Body>{PAIN_MESSAGE}</Body> : null}
 
             <View style={styles.metaRow}>
               <Clock size={12} strokeWidth={1.6} color={colors.sage} />
@@ -139,7 +150,7 @@ export function PracticeSheet({
               accessibilityRole="switch"
               accessibilityState={{ checked: easy }}
               accessibilityLabel={easy ? "Use the full version instead" : "Use the easier version"}
-              onPress={() => setEasy((value) => !value)}
+              onPress={() => { if (!painPaused) setEasy((value) => !value); }}
               style={({ pressed }) => [styles.easyToggle, easy && styles.easyToggleOn, pressed && { opacity: 0.8 }]}
             >
               <Feather size={13} strokeWidth={1.8} color={easy ? colors.lichen : colors.copperLight} />
@@ -255,6 +266,7 @@ export function PracticeSheet({
                 <QuietButton label="Rest day" onPress={() => void rest()} disabled={busy} style={{ flex: 1 }} />
               </View>
             )}
+            <QuietButton label="Something hurt" onPress={() => void hurt()} disabled={busy} />
             <Micro style={styles.footerNote}>A skipped or rested day never erases what you have grown.</Micro>
           </View>
         </View>

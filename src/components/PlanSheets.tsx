@@ -8,6 +8,8 @@ import { generateTree } from "../lib/gemini";
 import { planningLeg } from "../lib/engine/schedule";
 import { addDays, daysBetween, localDate } from "../lib/progression";
 import { planHistory } from "../lib/engine/history";
+import { classifyGoal } from "../lib/safety-rules";
+import { PhysicalScreening } from "./PhysicalScreening";
 import { assessGoalSafety } from "../lib/safety";
 import { BUDGETS, type Budget } from "../lib/plans";
 import type { DailyPlan } from "../lib/daily-types";
@@ -67,9 +69,11 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
   const [budget, setBudget] = useState<Budget>((plan?.minutes_budget ?? 15) as Budget);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<DailyPlan | null>(null);
+  const [screening, setScreening] = useState<boolean | null>(null);
+  const [acceptedScreening, setAcceptedScreening] = useState(false);
   if (!visible || !plan || !today) return null;
   const safety = assessGoalSafety(goal);
-  const valid = goal.trim().length >= 3 && goal.trim().length <= 140 && safety.safe;
+  const valid = goal.trim().length >= 3 && goal.trim().length <= 140 && safety.safe && (classifyGoal(goal) === "ordinary" || screening === false || (screening === true && acceptedScreening));
 
   async function save() {
     if (!plan) return;
@@ -79,6 +83,7 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
       // templates: the steps have to be rewritten for the new goal and the new
       // daily size, and the season so far is the best briefing it can get.
       const answers: OnboardingAnswers = {
+        conservativeMode: !!plan.conservative_mode || !!snapshot?.profile?.conservative_mode || screening === true,
         identity: plan.identity,
         goal,
         blocker: plan.blocker,
@@ -110,13 +115,14 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
       <Label style={{ marginTop: 6 }}>Your goal</Label>
       <TextInput
         value={goal}
-        onChangeText={(value) => { setGoal(value); setDraft(null); }}
+        onChangeText={(value) => { setGoal(value); setDraft(null); setScreening(null); setAcceptedScreening(false); }}
         maxLength={140}
         accessibilityLabel="Your goal"
         selectionColor={colors.copper}
         style={styles.input}
       />
       {!safety.safe ? <Body>{safety.reason}</Body> : null}
+      <PhysicalScreening goal={goal} answer={screening} accepted={acceptedScreening} onAnswer={v => { setScreening(v); setAcceptedScreening(false); setDraft(null); }} onAccept={() => setAcceptedScreening(true)} minor={snapshot?.profile?.age_bracket === "13_17"} />
       <Label style={{ marginTop: 16 }}>Minutes a day</Label>
       <BudgetChips value={budget} onChange={(value) => { setBudget(value); setDraft(null); }} />
       <Micro style={{ marginTop: 10, textTransform: "none", letterSpacing: 0.3 }}>
@@ -148,6 +154,8 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
   const [busy, setBusy] = useState(false);
   const [target, setTarget] = useState("");
   const [firstLeg, setFirstLeg] = useState(false);
+  const [screening, setScreening] = useState<boolean | null>(null);
+  const [acceptedScreening, setAcceptedScreening] = useState(false);
   if (!visible || !today || !snapshot) return null;
   const date = localDate(new Date(), snapshot.profile?.timezone ?? "UTC");
   const leg = planningLeg(date, target, firstLeg);
@@ -171,7 +179,7 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
     if (!plan || leg.kind !== "valid") return;
     setBusy(true);
     try {
-      const answers: OnboardingAnswers = { identity: plan.identity, goal: goal.trim(), blocker: plan.blocker, timeBudget: String(budget), targetDate: leg.target, legEnd: leg.end, daysRemaining: leg.length };
+      const answers: OnboardingAnswers = { conservativeMode: !!snapshot?.profile?.conservative_mode || screening === true, identity: plan.identity, goal: goal.trim(), blocker: plan.blocker, timeBudget: String(budget), targetDate: leg.target, legEnd: leg.end, daysRemaining: leg.length };
       const built = await generateTree(answers, { allowAi: aiAllowed, history: planHistory(snapshot) });
       setNextPlan(dailyPlanFromTree(answers, built.tree, built.source));
     } finally { setBusy(false); }
@@ -213,7 +221,7 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
           <Label>Tell it what you want and by when</Label>
           <TextInput
             value={goal}
-            onChangeText={(value) => { setGoal(value); setNextPlan(null); }}
+            onChangeText={(value) => { setGoal(value); setNextPlan(null); setScreening(null); setAcceptedScreening(false); }}
             maxLength={140}
             placeholder="One clear change"
             placeholderTextColor={colors.sageDeep}
@@ -227,6 +235,7 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
           {leg.kind === "too-soon" ? <Body>The earliest available date is {leg.earliest}.</Body> : null}
           {leg.kind === "first-leg" ? <><Body>Keep your target and start with a 112-day leg ending {leg.checkpoint}.</Body><QuietButton label="Plan this first leg" onPress={() => setFirstLeg(true)} /></> : null}
           {!safety.safe ? <Body>{safety.reason}</Body> : null}
+          <PhysicalScreening goal={goal} answer={screening} accepted={acceptedScreening} onAnswer={v => { setScreening(v); setAcceptedScreening(false); setNextPlan(null); }} onAccept={() => setAcceptedScreening(true)} minor={snapshot?.profile?.age_bracket === "13_17"} />
           <Label style={{ marginTop: 14 }}>Minutes a day</Label>
           <BudgetChips value={budget} onChange={(value) => { setBudget(value); setNextPlan(null); }} />
           {nextPlan ? <View style={{ gap: 8, marginTop: 12 }}>
@@ -239,7 +248,7 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
             label={busy ? "Building" : "Generate a draft"}
             onPress={() => void beginNew()}
             loading={busy}
-            disabled={busy || authBusy || goal.trim().length < 3 || !safety.safe || leg.kind !== "valid"}
+            disabled={busy || authBusy || goal.trim().length < 3 || !safety.safe || leg.kind !== "valid" || (classifyGoal(goal) !== "ordinary" && screening !== false && !(screening && acceptedScreening))}
             style={{ marginTop: 16 }}
           />}
           <QuietButton label="Back" onPress={() => { setNextPlan(null); setNewGoalOpen(false); }} disabled={busy} />

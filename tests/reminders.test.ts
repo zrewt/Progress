@@ -13,6 +13,7 @@ test("only one known practice is scheduled; completed today moves to tomorrow; l
  const now=new Date("2026-03-07T10:00:00Z");
  assert.equal(nextReminder(snapshot,"08:00",now)?.date,"2026-03-07");
  assert.equal(nextReminder(snapshot,"08:00",now)?.title,"Opening scene");
+ assert.equal(nextReminder({...snapshot,seasons:snapshot.seasons.map(s=>({...s,progression_paused:true}))},"08:00",now)?.title,"One sentence");
  const done={...snapshot,events:[{season_id:"s",local_date:"2026-03-07",kind:"easy",undone_at:null}]} as DailySnapshot;
  assert.equal(nextReminder(done,"08:00",now)?.date,"2026-03-08");
  assert.equal(nextReminder(snapshot,"08:00",new Date("2026-03-30T10:00:00Z")),null);

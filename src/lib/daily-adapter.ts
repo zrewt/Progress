@@ -1,5 +1,6 @@
 import type { DailyPlan, DailySnapshot, PracticeDraft, Rung } from "./daily-types";
 import type { GeneratedEasy, GeneratedNode, GeneratedTree, OnboardingAnswers, PillarId, Profile, TreeNode } from "./types";
+import { classifyGoal } from "./safety-rules";
 import { PILLARS } from "./pillars";
 import { PROGRESSION } from "./progression";
 import { buildPlan, detectTheme, validatePlan, validatePractice, MAX_VARIANT_STEPS, type Budget } from "./plans";
@@ -161,6 +162,8 @@ export function dailyPlanFromTree(
     // Where the plan came from is the source of the tree, not how much of it
     // survived: an on-device tree is local even when all four branches are used.
     plan_source: source !== "edge-ai" || !containsAi ? "local" : containsLocalRepair ? "mixed" : "ai",
+    conservative_mode: !!answers.conservativeMode || classifyGoal(answers.goal) === "high-risk",
+    goal_category: classifyGoal(answers.goal),
     personalization_context: answers.context ?? [],
     target_date: answers.targetDate ?? null,
     season_length_days: answers.daysRemaining ?? null,
@@ -174,7 +177,7 @@ export function dailyPlanFromTree(
     // Visible in the Metro logs, so "the plan looks like a template" can be told
     // apart from "the draft was thrown away" without guessing.
     console.warn("[plan] the drafted plan could not be saved as written:", problems);
-    return { ...base, plan_source: "local", personalization_context: answers.context ?? [], target_date: answers.targetDate ?? null, season_length_days: answers.daysRemaining ?? null, stages: tree.stages, reality_check: tree.realityCheck, branch_labels: labels };
+    return { ...base, conservative_mode: !!answers.conservativeMode || classifyGoal(answers.goal) === "high-risk", goal_category: classifyGoal(answers.goal), plan_source: "local", personalization_context: answers.context ?? [], target_date: answers.targetDate ?? null, season_length_days: answers.daysRemaining ?? null, stages: tree.stages, reality_check: tree.realityCheck, branch_labels: labels };
   }
   if (fromDraft < repaired.length) {
     console.warn(`[plan] ${repaired.length - fromDraft} branch(es) fell back to the curated library`);
@@ -233,6 +236,8 @@ export function planFromSeason(snapshot: DailySnapshot, seasonId: string): Daily
   const practices = snapshot.practices.filter((practice) => practice.season_id === seasonId && practice.active);
   if (!practices.length) return null;
   return {
+    conservative_mode: season.conservative_mode,
+    goal_category: season.goal_category,
     goal: season.goal,
     identity: season.identity,
     blocker: season.blocker,

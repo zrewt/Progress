@@ -1,9 +1,39 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { assessGoal, validatePracticeText, validateStepsWithinBudget } from "../src/lib/safety-rules";
+import { classifyGoal, safeForCategory, requiresPreparation, assessGoal, validatePracticeText, validateStepsWithinBudget } from "../src/lib/safety-rules";
+import { eligibleAge } from "../src/lib/age";
+import { buildSeedPlan } from "../src/lib/gemini";
+import { dailyPlanFromTree } from "../src/lib/daily-adapter";
 import { assessGoalSafety } from "../src/lib/safety";
 
+test("age eligibility stores brackets only and rejects under 13 or missing choices", () => {
+  assert.equal(eligibleAge("under_13"), false); assert.equal(eligibleAge(null), false);
+  assert.equal(eligibleAge("13_17"), true); assert.equal(eligibleAge("18_plus"), true);
+});
+test("goal categories only escalate; making an app is not performing the sport", () => {
+  assert.equal(classifyGoal("climb the Matterhorn"), "high-risk");
+  assert.equal(classifyGoal("learn diving"), "high-risk");
+  assert.equal(classifyGoal("study division"), "ordinary");
+  assert.equal(classifyGoal("play tennis"), "physical");
+  assert.equal(classifyGoal("build a climbing app"), "ordinary");
+  assert.equal(classifyGoal("build an app and climb Everest"), "high-risk");
+  assert.equal(classifyGoal("climb Everest", "ordinary"), "high-risk");
+  assert.equal(classifyGoal("write a novel", "physical"), "physical");
+  assert.equal(safeForCategory("Map out the Hörnli hut summit route", "high-risk"), false);
+});
+test("high-risk and conservative physical starter plans contain preparation only", () => {
+  for (const goal of ["climb the Matterhorn", "play tennis"]) {
+    const answers = { identity: "athlete" as const, goal, blocker: "consistency" as const, timeBudget: "15", conservativeMode: true };
+    const tree = buildSeedPlan(answers);
+    const plan = dailyPlanFromTree(answers, tree, "seed-engine");
+    assert.equal(plan.conservative_mode, true);
+    assert.equal(plan.plan_source, "local");
+    assert.match(plan.safety_note, /qualified instruction/);
+    assert.ok(plan.practices.every(p => safeForCategory(JSON.stringify(p), "high-risk")));
+    assert.equal(requiresPreparation(classifyGoal(goal), true), true);
+  }
+});
 test("ordinary evening and food goals are allowed", () => {
   for (const goal of ["stop eating at night", "cut sugar", "no late-night snacking", "cook at home more often"]) {
     assert.equal(assessGoal(goal).kind, "ok", goal);

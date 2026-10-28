@@ -74,6 +74,7 @@ export interface OnboardingAnswers {
   blocker: BlockerId;
   timeBudget: string;
   context?: PersonalizationAnswer[];
+  conservativeMode?: boolean;
   targetDate?: string;
   legEnd?: string;
   daysRemaining?: number;

@@ -102,7 +102,7 @@ export function todayState(snapshot: DailySnapshot, now: Date = new Date()): Tod
     week,
     missedDays,
     welcomeBack: missedDays >= 2 && !countedToday,
-    easierByDefault: season.week_mode === "lighter" && (!season.week_mode_until || today <= season.week_mode_until),
+    easierByDefault: !!season.progression_paused || (season.week_mode === "lighter" && (!season.week_mode_until || today <= season.week_mode_until)),
     reviewWeek: nextReviewWeek(season.started_on, today, reviewed, season.season_length_days ? season.ends_on : undefined),
     recent,
     lastCountedDate: lastCounted,

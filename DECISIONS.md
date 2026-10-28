@@ -1,5 +1,14 @@
 # Implementation decisions
 
+## Target-date change: Stage 4 safety
+
+- Existing accounts keep nullable age brackets and are asked on the next app session; no historical rows are rewritten. New auth.users inserts require an eligible self-declared bracket. This is tested in PGlite, not verified against live Supabase Auth; self-declared age cannot be verified. The bracket is immutable through the app RPC after first confirmation.
+- High-risk and conservative physical initial plans deliberately use a fixed, labelled local preparation-only alternative even if AI drafting succeeds. This is smaller and safer than trusting model prose to avoid technical instruction. Ordinary physical goals still use normal drafting. Keyword classification is conservative but cannot recognize every possible wording; making a sport-related app/book alone is treated as making, while mixed goals retain physical flags.
+- Screening answers remain transient component state. Only conservative_mode is included in plan storage; goal_category is stored separately as a category without duplicating goal text in logs. Flags only escalate. Weekly AI prompts inherit the persisted flags, and the existing output validators remain in place.
+- Pain records a skipped event and no growth. A full event and accepted weekly detail are blocked until an easy practice is recorded. Replaying the same pain event after that easy practice must not pause progression again. This is not a medical clearance or diagnosis.
+- The existing database-test auth.users stub gained raw_user_meta_data to test the real signup trigger shape. No previously saved season, event, migration or historical plan was changed.
+- Phone checks: try under-13 signup, teen physical onboarding, adult physical screening yes/no, a Matterhorn goal, pain followed by easy practice, and signed-in legacy account age confirmation. No phone run, native build, deployment or remote migration has been performed.
+
 ## Stage 1
 
 1. Season dates are local calendar dates; ends_on is exclusive (started_on + 30). Events retain their derived local_date permanently. Timezone changes affect new events, not history. UTC is the explicit migration default because the original app never saved a timezone; users can change it later.

@@ -20,7 +20,7 @@ export class DailyData {
   async load(userId: string): Promise<DailySnapshot> {
     // Never substitute [] for a failed read, generate a plan, or write during hydration.
     const [profile, seasons, practices, milestones, events, reviews, practiceWeeks] = await Promise.all([
-      this.sb.from("profiles").select("id,display_name,timezone,blocker,ai_consent_version,ai_consent_at").eq("id", userId).maybeSingle(),
+      this.sb.from("profiles").select("id,display_name,timezone,blocker,ai_consent_version,ai_consent_at,age_bracket,conservative_mode").eq("id", userId).maybeSingle(),
       this.sb.from("seasons").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
       this.sb.from("practices").select("*").eq("user_id", userId).order("sort_order"),
       this.sb.from("milestones").select("*").eq("user_id", userId),
@@ -46,6 +46,7 @@ export class DailyData {
     return this.rpc<string>("start_next_season", { p_plan: plan, p_timezone: timezone, p_display_name: name ?? null, p_previous_status: "completed" });
   }
   record(input: EventInput) {
+    if (input.something_hurt) return this.rpc<{ event: CompletionEvent; progress: Progress; credited: boolean }>("record_pain", { p_season_id: input.season_id, p_practice_id: input.practice_id, p_client_event_id: input.client_event_id, p_occurred_at: input.occurred_at });
     const args = { p_season_id: input.season_id, p_practice_id: input.practice_id, p_kind: input.kind, p_client_event_id: input.client_event_id, p_occurred_at: input.occurred_at, p_note: input.note ?? null };
     return this.rpc<{ event: CompletionEvent; progress: Progress; credited: boolean }>(input.kind === "rest" || input.kind === "skipped" ? "record_skip_or_rest" : "complete_practice", input.kind === "rest" || input.kind === "skipped" ? args : { ...args, p_minutes_actual: input.minutes_actual ?? null, p_effort: input.effort ?? null });
   }
@@ -62,6 +63,7 @@ export class DailyData {
   acceptWeek(seasonId: string, draft: WeeklyDraft) { return this.rpc<number>("accept_practice_week", { p_season_id: seasonId, p_draft: draft }); }
   endSeason(seasonId: string, status: "completed" | "archived") { return this.rpc<null>("end_season", { p_season_id: seasonId, p_status: status }); }
   history() { return this.rpc<SeasonHistoryEntry[]>("season_history", {}); }
+  setAgeBracket(bracket: "13_17" | "18_plus") { return this.rpc<null>("set_age_bracket", { p_bracket: bracket }); }
   recordConsent(version: string) { return this.rpc<null>("record_ai_consent", { p_version: version }); }
   withdrawConsent() { return this.rpc<null>("withdraw_ai_consent", {}); }
   setTimezone(timezone: string, name?: string | null) { return this.rpc<null>("update_preferences", { p_timezone: timezone, p_display_name: name ?? null }); }

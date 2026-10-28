@@ -27,6 +27,7 @@ export const AI_CONSENT_COPY = {
     "The identity you chose",
     "Your target date, planning checkpoint and daily time budget",
     "What usually gets in the way and any optional answers you provide",
+    "Your goal safety category and conservative-mode flag, when relevant; not your age bracket or exercise-screening answer",
     "Practice titles, a short progress summary and review note when available",
     "The current practice, days remaining, completed days, effort and your feedback when you request a weekly change",
   ],
