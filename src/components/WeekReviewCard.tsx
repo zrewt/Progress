@@ -2,32 +2,43 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useGame } from "../lib/game-context";
 import { adherenceFor, reviewDecision, reviewProposal, weekLabel } from "../lib/review";
-import { suggestReviewPractice } from "../lib/gemini";
+import { suggestReviewPractice, suggestWeeklyDetail } from "../lib/gemini";
+import { checkpointWeek, localWeeklyAlternative } from "../lib/engine/rolling";
+import { daysBetween } from "../lib/progression";
+import type { WeeklyDraft } from "../../supabase/functions/generate-tree/plan-validation";
 import type { PracticeDraft } from "../lib/daily-types";
 import { alpha, colors, fonts } from "../theme";
 import { PrimaryButton, QuietButton } from "./Controls";
 import { Body, Display, Label, Micro } from "./Type";
 
 export function WeekReviewCard() {
-  const { today, snapshot, submitReview, replacePractice, aiAllowed } = useGame();
+  const { today, snapshot, submitReview, replacePractice, acceptWeek, aiAllowed } = useGame();
   const [difficulty, setDifficulty] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [weekly, setWeekly] = useState<WeeklyDraft | null>(null);
   const [suggestion, setSuggestion] = useState<PracticeDraft | null>(null);
 
   if (!today?.reviewWeek || dismissed) return null;
   const week = today.reviewWeek;
-  const { practiced, adherence } = adherenceFor(snapshot?.events ?? [], week);
+  const { practiced, adherence, denominator } = adherenceFor((snapshot?.events ?? []).filter(e => e.season_id === today.season.id), week, today.season.season_length_days ? today.season.ends_on : undefined);
+  const effectiveWeek = checkpointWeek(today.season, today.today);
+  const currentPractices = [today.primary, ...today.supporting];
   const proposal = decision ? reviewProposal(decision as "lighter" | "same" | "harder") : null;
 
   async function propose() {
     if (!today || !difficulty) return;
     setBusy(true); setFailure(null);
     setDecision(reviewDecision(adherence, difficulty));
-    if (aiAllowed && note.trim()) {
+    if (today.season.season_length_days && effectiveWeek) {
+      const season = today.season;
+      const draft = await suggestWeeklyDetail({ identity: season.identity, goal: season.goal, blocker: season.blocker, timeBudget: String(season.minutes_budget), targetDate: season.target_date ?? undefined, legEnd: season.ends_on, daysRemaining: Math.max(0, daysBetween(today.today, season.ends_on)), context: season.personalization_context ?? [] }, season.id, currentPractices, effectiveWeek, season.plan_version, note, difficulty, aiAllowed);
+      setWeekly(draft);
+      if (!draft) setFailure("Weekly detail is unavailable. Your approved practice continues. Retry or choose the local easy alternative.");
+    } else if (aiAllowed && note.trim() && !today.season.season_length_days) {
       const season = today.season;
       const draft = await suggestReviewPractice({ identity: season.identity, goal: season.goal, blocker: season.blocker, timeBudget: String(season.minutes_budget), context: season.personalization_context ?? [] }, today.primary, note, practiced, true);
       setSuggestion(draft);
@@ -58,7 +69,7 @@ export function WeekReviewCard() {
       <Label style={{ color: colors.copperLight }}>{weekLabel(week, today.season.started_on)} · your review</Label>
       <Display style={styles.title}>How did this week feel?</Display>
       <Body style={styles.body}>
-        You practised on {practiced} of 7 days. One question is enough; nothing changes until you choose it.
+        You practised on {practiced} of {denominator} days. One question is enough; nothing changes until you choose it.
       </Body>
 
       {proposal ? (
@@ -67,6 +78,14 @@ export function WeekReviewCard() {
             <Display style={styles.proposalTitle}>{proposal.title}</Display>
             <Text style={styles.proposalBody}>{proposal.detail}</Text>
           </View>
+          {today.season.season_length_days && effectiveWeek ? <View style={styles.proposal}>
+            <Body>Week {effectiveWeek}: {weekly?.source === "local" ? "Local easy alternative" : "AI proposal — not yet applied"}</Body>
+            {weekly?.practices.map(p => <View key={p.practice_id} style={{ gap: 6 }}><Body>Current: {currentPractices.find(c => c.id === p.practice_id)?.full_variant.steps.join("; ")}</Body><Body>Proposed: {p.title} ({p.full_variant.minutes} min){"\n"}{p.full_variant.steps.join("\n")}{"\n"}Easy: {p.easy_variant.steps.join("; ")}</Body></View>)}
+            {weekly ? <QuietButton label="Accept proposed week" disabled={busy || (weekly.source === "ai" && !aiAllowed)} onPress={() => { setBusy(true); void acceptWeek(weekly).then(ok => { if (ok) { setWeekly(null); setFailure("Week accepted. Save your review below."); } else setFailure("Nothing changed. Refresh and retry."); }).finally(() => setBusy(false)); }} /> : null}
+            <QuietButton label="Retry weekly detail" disabled={busy || !aiAllowed} onPress={() => void propose()} />
+            <QuietButton label="Preview local easy alternative" disabled={busy} onPress={() => setWeekly(localWeeklyAlternative(currentPractices, effectiveWeek, today.season.plan_version))} />
+            <QuietButton label="Keep approved practices" disabled={busy} onPress={() => setWeekly(null)} />
+          </View> : null}
           {suggestion ? <View style={styles.proposal}>
             <Body>Current: {today.primary.title}{"\n"}{today.primary.full_variant.steps.join("\n")}</Body>
             <Body>Suggested: {suggestion.title}{"\n"}{suggestion.why}</Body>

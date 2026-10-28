@@ -77,6 +77,42 @@ test('daily database: migrations, backfill, atomic retries, undo, boundaries, ar
  });
 });
 
+test('new target-date legs preserve legacy seasons and scale daily and weekly milestones', async(t)=>{
+ const db=await setup(); t.after(()=>db.close()); await asUser(db);
+ const old=(await db.query('select id,started_on,ends_on from public.seasons limit 1')).rows[0];
+ const target=(await db.query("select to_char((now() at time zone 'UTC')::date + 14,'YYYY-MM-DD') value")).rows[0].value;
+ const season=await rpc(db,'start_next_season',[{...plan,target_date:target,season_length_days:14},'UTC','Player','archived']);
+ const row=(await db.query('select target_date,season_length_days,ends_on-started_on length from public.seasons where id=$1',[season])).rows[0];
+ assert.equal(row.season_length_days,14); assert.equal(row.length,14);
+ const before=(await db.query('select started_on,ends_on,target_date,season_length_days from public.seasons where id=$1',[old.id])).rows[0];
+ assert.deepEqual(before.started_on,old.started_on); assert.deepEqual(before.ends_on,old.ends_on); assert.equal(before.target_date,null); assert.equal(before.season_length_days,null);
+ const milestones=(await db.query('select branch,array_agg(required_days order by tier) thresholds from public.milestones where season_id=$1 group by branch',[season])).rows;
+ assert.deepEqual(milestones.find(m=>m.branch==='craft').thresholds,[2,4,7,11]);
+ assert.deepEqual(milestones.find(m=>m.branch==='body').thresholds,[1,1,1,2]);
+ await assert.rejects(()=>rpc(db,'start_next_season',[{...plan,target_date:target,season_length_days:30},'UTC','Player','archived']));
+});
+
+test('rolling acceptance preserves milestone progress, rejects stale devices and respects consent', async(t)=>{
+ const db=await setup(); t.after(()=>db.close()); await asUser(db);
+ const target=(await db.query("select to_char((now() at time zone 'UTC')::date + 21,'YYYY-MM-DD') value")).rows[0].value;
+ const season=await rpc(db,'start_next_season',[{...plan,target_date:target,season_length_days:21},'UTC','Writer','archived']);
+ const practices=(await db.query('select * from public.practices where season_id=$1 order by sort_order',[season])).rows;
+ await db.exec('reset role');
+ await db.query("update public.seasons set started_on=started_on-7,ends_on=ends_on-7 where id=$1",[season]); await asUser(db);
+ const start=(await db.query("select to_char(started_on,'YYYY-MM-DD') value from public.seasons where id=$1",[season])).rows[0].value;
+ for(let i=0;i<3;i++){ const at=new Date(start+'T12:00:00Z'); at.setUTCDate(at.getUTCDate()+i); await rpc(db,'complete_practice',[season,practices[0].id,'easy',crypto.randomUUID(),at.toISOString()]); }
+ const before=await rpc(db,'get_progress',[season]); assert.ok(before.unlocked_milestones.length>0);
+ const draft={effective_week:2,expected_version:1,source:'ai',practices:practices.map(p=>({practice_id:p.id,title:p.title,why:p.why,full_variant:p.full_variant,easy_variant:p.easy_variant}))};
+ await assert.rejects(()=>rpc(db,'accept_practice_week',[season,draft]));
+ await rpc(db,'record_ai_consent',['2026-10-ai-3']);
+ assert.equal(await rpc(db,'accept_practice_week',[season,draft]),2);
+ const after=await rpc(db,'get_progress',[season]); assert.deepEqual(after,before);
+ assert.equal((await db.query('select count(*)::int n from public.practice_weeks where season_id=$1',[season])).rows[0].n,4);
+ await assert.rejects(()=>rpc(db,'accept_practice_week',[season,draft]));
+ await asUser(db,B); await assert.rejects(()=>rpc(db,'accept_practice_week',[season,draft])); assert.equal((await db.query('select count(*)::int n from public.practice_weeks')).rows[0].n,0); await asUser(db);
+ await rpc(db,'withdraw_ai_consent'); await assert.rejects(()=>rpc(db,'accept_practice_week',[season,{...draft,expected_version:2}]));
+});
+
 test('personalization is saved, owner-scoped and removable without changing plan history', async(t)=>{
  const db=await setup(); t.after(()=>db.close()); await asUser(db);
  const context=[{question:'What can you use?',answer:'A wall, no partner'}];

@@ -7,6 +7,9 @@ import {
 } from "./safety";
 import { validatePracticeText, validateStepsWithinBudget } from "./safety-rules";
 import type { Practice, PracticeDraft } from "./daily-types";
+import { stageRanges } from "./engine/schedule";
+import { addDays } from "./progression";
+import { validateWeeklyDraft, type WeeklyDraft } from "../../supabase/functions/generate-tree/plan-validation";
 import { fallbackReason, type FallbackReason } from "./engine/fallback";
 import { GENERAL_QUESTIONS, validateQuestions } from "../../supabase/functions/generate-tree/questions";
 import type {
@@ -292,7 +295,7 @@ function templatesForTheme(
   theme: GoalTheme,
   goal: string,
 ): Record<PillarId, ThemeBranchTemplate> {
-  const shortGoal = goal.trim() || "your 30-day goal";
+  const shortGoal = goal.trim() || "your goal";
 
   // One practice for the body that actually serves a sitting, thinking goal:
   // leave the screen, move, and come back with the next step decided. Each node
@@ -473,7 +476,7 @@ function templatesForTheme(
             minutes: 2,
             description: "Let the people around you know your new evening rhythm.",
             steps: [
-              "Tell a roommate, partner, or friend about your 30-day evening goal.",
+              "Tell a roommate, partner, or friend about your evening goal and checkpoint.",
               "Ask them to join you for tea or a quick chat instead of late snacks.",
             ],
           },
@@ -548,7 +551,7 @@ function templatesForTheme(
           {
             title: "Signature Endurance Milestone",
             minutes: 25,
-            description: `Your capstone session celebrating 30 days of showing up for "${shortGoal}".`,
+            description: `Your capstone session marking this planning checkpoint for "${shortGoal}".`,
             steps: [
               "Start unhurried for the first 5 minutes and settle into your strongest sustainable rhythm.",
               "Cool down gently and record how much easier the baseline feels now.",
@@ -646,7 +649,7 @@ function templatesForTheme(
             minutes: 2,
             description: `Tell one trusted person what you are building with "${shortGoal}".`,
             steps: [
-              "Send a 1-sentence text to a friend sharing your 30-day goal.",
+              "Send a 1-sentence text to a friend sharing your goal and checkpoint.",
               "Ask them to check in with you once at the end of the week.",
             ],
           },
@@ -743,11 +746,11 @@ function templatesForTheme(
       focus: "Environment & Honest Sharing",
       nodes: [
         {
-          title: "Tell One Person Your 30-Day Promise",
+          title: "Name Your Goal and Checkpoint",
           minutes: 2,
           description: `Make "${shortGoal}" real outside your own head.`,
           steps: [
-            "Message one supportive friend with your 30-day goal in plain words.",
+            "Write your goal and the next checkpoint in plain words.",
             "Tell them you are starting with a 2-minute daily seed.",
           ],
         },
@@ -798,7 +801,9 @@ export function buildSeedPlan(answers: OnboardingAnswers): GeneratedTree {
   const antiBlockerInstruction = blockerStep(answers.blocker);
 
   return {
-    summary: `Your next 30 days: ${safeGoal}. One ${answers.timeBudget}-minute practice a day, plus three lighter ones across the week, and a smaller version for the days it does not fit.`,
+    summary: `Your next ${answers.daysRemaining ?? 30} days: ${safeGoal}. One ${answers.timeBudget}-minute practice a day, plus three lighter ones across the week, and a smaller version for the days it does not fit.`,
+    stages: answers.legEnd && answers.daysRemaining ? stageRanges(addDays(answers.legEnd, -answers.daysRemaining), answers.daysRemaining).map((range, i) => ({ ...range, title: `Stage ${i + 1}`, outcome: "Review this part of your goal at the checkpoint." })) : undefined,
+    realityCheck: answers.daysRemaining ? { level: "stretch", explanation: "This local starter cannot assess the deadline; review the first actions and adjust your goal or date if needed." } : undefined,
     safetyNote:
       safety.coachingNote ??
       "Safety & pacing active: start with 2-minute seeds, stay inside your time budget, and rest when needed.",
@@ -807,7 +812,7 @@ export function buildSeedPlan(answers: OnboardingAnswers): GeneratedTree {
       return {
         pillar: pillar.id,
         focus: branch.focus,
-        nodes: branch.nodes.map((node, tier) => ({
+        nodes: branch.nodes.slice(0, answers.daysRemaining ? 2 : 4).map((node, tier) => ({
           title: node.title,
           duration: clampDurationToBudget(
             `${node.minutes} min`,
@@ -866,6 +871,8 @@ export function normalizeTree(
     primaryBranch?: unknown;
     summary?: unknown;
     safetyNote?: unknown;
+    stages?: unknown;
+    realityCheck?: unknown;
     pillars?: unknown;
   };
   const list = Array.isArray(root.pillars) ? root.pillars : null;
@@ -874,6 +881,8 @@ export function normalizeTree(
   return {
     primaryBranch: typeof root.primaryBranch === "string" && PILLARS.some((p) => p.id === root.primaryBranch)
       ? root.primaryBranch as PillarId : undefined,
+    stages: Array.isArray(root.stages) ? root.stages as GeneratedTree["stages"] : fallback.stages,
+    realityCheck: root.realityCheck && typeof root.realityCheck === "object" ? root.realityCheck as GeneratedTree["realityCheck"] : undefined,
     summary: asString(root.summary, fallback.summary).slice(0, 220),
     safetyNote: asString(root.safetyNote, fallback.safetyNote).slice(0, 180),
     pillars: PILLARS.map((meta) => {
@@ -891,7 +900,7 @@ export function normalizeTree(
       let localRepair = !entry;
       let hasAiContent = false;
       const nodes: GeneratedNode[] = [];
-      for (let tier = 0; tier < 4; tier += 1) {
+      for (let tier = 0; tier < (answers.daysRemaining ? 2 : 4); tier += 1) {
         const candidate = rawNodes[tier] as Record<string, unknown> | undefined;
         const base = fallbackBranch.nodes[tier];
         if (!candidate || typeof candidate !== "object") {
@@ -914,7 +923,7 @@ export function normalizeTree(
             base.instructions,
           ),
         };
-        nodes.push(sanitizeGeneratedNode(rawCandidate, base, tier, answers));
+        nodes.push({ ...sanitizeGeneratedNode(rawCandidate, base, tier, answers), easy: asEasy(candidate.easy) });
       }
       return {
         pillar: meta.id,
@@ -976,7 +985,7 @@ export async function generateQuestions(answers: OnboardingAnswers, allowAi: boo
   if (sb && assessGoalSafety(answers.goal).safe) {
     try {
       const { data, error } = await sb.functions.invoke("generate-tree", {
-        body: { mode: "questions", goal: scrubGoalForPrivacy(answers.goal), identity: answers.identity, blocker: answers.blocker, timeBudget: answers.timeBudget },
+        body: { mode: "questions", goal: scrubGoalForPrivacy(answers.goal), identity: answers.identity, blocker: answers.blocker, timeBudget: answers.timeBudget, targetDate: answers.targetDate, legEnd: answers.legEnd, daysRemaining: answers.daysRemaining },
       });
       if (!error) return questionResponse(data);
       const failure = await functionFailure(error);
@@ -987,6 +996,18 @@ export async function generateQuestions(answers: OnboardingAnswers, allowAi: boo
     }
   }
   return { questions: GENERAL_QUESTIONS, source: "general", reason: "unavailable" };
+}
+
+export async function suggestWeeklyDetail(answers: OnboardingAnswers, seasonId: string, practices: Practice[], week: number, version: number, note: string, difficulty: number, allowAi: boolean): Promise<WeeklyDraft | null> {
+  if (!allowAi || !assessGoalSafety(answers.goal).safe) return null;
+  const { getSupabase } = await import("./supabase");
+  const sb = getSupabase();
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb.functions.invoke("generate-tree", { body: { mode: "weekly", seasonId, effectiveWeek: week, expectedVersion: version, note: scrubGoalForPrivacy(note), difficulty } });
+    if (error || !validateWeeklyDraft(data, practices.map(p => ({ id: p.id, minutes: p.full_variant.minutes })), Number(answers.timeBudget))) return null;
+    return data;
+  } catch { return null; }
 }
 
 export async function suggestReviewPractice(answers: OnboardingAnswers, practice: Practice, note: string, practiced: number, allowAi: boolean): Promise<PracticeDraft | null> {
@@ -1023,7 +1044,7 @@ export async function generateTree(
   if (!safety.safe) {
     throw new Error(
       safety.reason ??
-        "Please choose a safe, constructive 30-day goal before generating your tree.",
+        "Please choose a safe, constructive goal before generating your tree.",
     );
   }
 
@@ -1042,6 +1063,7 @@ export async function generateTree(
           timeBudget: answers.timeBudget,
           history: options.history ?? null,
           context: (answers.context ?? []).map(({ question, answer }) => ({ question: scrubGoalForPrivacy(question), answer: scrubGoalForPrivacy(answer) })),
+          targetDate: answers.targetDate, legEnd: answers.legEnd, daysRemaining: answers.daysRemaining,
         },
       });
 

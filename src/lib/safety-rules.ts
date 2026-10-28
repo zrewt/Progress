@@ -78,7 +78,7 @@ function firstRisk(text: string) {
 export function assessGoal(raw: string): GoalSafety {
   const goal = raw.trim();
   if (goal.length < 3) {
-    return { kind: "decline", message: "Write a few words about the change you want in 30 days." };
+    return { kind: "decline", message: "Write a few words about the change you want." };
   }
 
   if (SELF_HARM.test(goal)) {

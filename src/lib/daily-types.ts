@@ -1,4 +1,4 @@
-import type { BlockerId, IdentityId, PillarId, PersonalizationAnswer } from "./types";
+import type { BlockerId, IdentityId, PillarId, PersonalizationAnswer, PlanStage, RealityCheck } from "./types";
 
 /** One week of a practice. Week 1 is the variant itself; later weeks are its ladder. */
 export interface Rung { title: string; minutes: number; steps: string[] }
@@ -8,6 +8,11 @@ export interface Rung { title: string; minutes: number; steps: string[] }
  * jsonb, which is why no migration is needed and older plans still read fine.
  */
 export interface Variant extends Rung { ladder?: Rung[] }
+export interface PracticeWeek {
+  practice_id: string; season_id: string; user_id: string; effective_week: number;
+  title: string; why: string; full_variant: Variant; easy_variant: Variant;
+  source: "ai" | "local"; accepted_at: string;
+}
 export interface PracticeDraft {
   branch: PillarId;
   title: string;
@@ -26,6 +31,10 @@ export interface DailyPlan {
   plan_version: number;
   plan_source: "ai" | "local" | "mixed" | "unknown";
   personalization_context?: PersonalizationAnswer[];
+  target_date?: string | null;
+  season_length_days?: number | null;
+  stages?: PlanStage[];
+  reality_check?: RealityCheck;
   plan_summary: string;
   safety_note: string;
   branch_labels: Record<PillarId, string>;
@@ -127,6 +136,7 @@ export interface DailySnapshot {
   milestones: Milestone[];
   events: CompletionEvent[];
   reviews: WeeklyReview[];
+  practiceWeeks?: PracticeWeek[];
   progress: Progress | null;
 }
 export interface EventInput {

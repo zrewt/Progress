@@ -65,8 +65,8 @@ test("review thresholds match the SQL rules at their boundaries", () => {
 
 test("adherence counts distinct practised days in the aligned week", () => {
   const events = [event("2026-10-10"), event("2026-10-10", "easy"), event("2026-10-11"), event("2026-10-17"), event("2026-10-18")];
-  assert.deepEqual(adherenceFor(events, "2026-10-10"), { practiced: 2, adherence: 2 / 7 });
-  assert.deepEqual(adherenceFor([event("2026-10-10", "full", null)], "2026-10-10"), { practiced: 1, adherence: 1 / 7 });
+  assert.deepEqual(adherenceFor(events, "2026-10-10"), { practiced: 2, adherence: 2 / 7, denominator: 7 });
+  assert.deepEqual(adherenceFor([event("2026-10-10", "full", null)], "2026-10-10"), { practiced: 1, adherence: 1 / 7, denominator: 7 });
 });
 
 test("reviews are offered for finished weeks only, once each", () => {

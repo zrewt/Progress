@@ -23,7 +23,7 @@ export function TodayCard({ onBegin }: { onBegin: (practice: Practice) => void }
   const countedEvent = today.todayEvents.find((event) => event.kind === "full" || event.kind === "easy");
   const doneEasily = countedEvent?.kind === "easy";
   const seasonEvents = (snapshot?.events ?? []).filter((event) => !event.undone_at && event.season_id === season.id);
-  const dueSupporting = supporting.filter((practice) => isSupportingDue(practice, seasonEvents, today.today));
+  const dueSupporting = supporting.filter((practice) => isSupportingDue(practice, seasonEvents, today.today, season));
 
   return (
     <View style={styles.card}>
@@ -88,9 +88,9 @@ export function TodayCard({ onBegin }: { onBegin: (practice: Practice) => void }
               ? "Your review asked for a lighter week, so the easier version is offered first."
               : "Two minutes is a real practice. Choose the easier version any day."}
           </Micro>
-          {weeks > 1 ? (
+          {weeks > 1 || today.continuation ? (
             <Micro style={styles.weekNote}>
-              Week {week} of {weeks} — this is the same practice, one step further than last week.
+              {today.continuation ? "Continuation of your approved practice — later detail has not been accepted." : `Week ${week} — approved practice detail.`}
             </Micro>
           ) : null}
         </>

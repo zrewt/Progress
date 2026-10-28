@@ -4,8 +4,12 @@
  */
 export const APP_VERSION = "1.0.0";
 
+/** Date bounds apply to each new planning leg, not the ultimate goal. */
+export const MIN_LEG_DAYS = 14;
+export const MAX_LEG_DAYS = 112;
+
 /** Bump when the consent wording changes; stored with the acceptance time. */
-export const AI_CONSENT_VERSION = "2026-10-ai-2";
+export const AI_CONSENT_VERSION = "2026-10-ai-3";
 
 /** Set to true when the Supabase project requires email confirmation. */
 export const EMAIL_VERIFICATION_REQUIRED = false;
@@ -21,10 +25,10 @@ export const AI_CONSENT_COPY = {
   sent: [
     "Your goal, in your own words",
     "The identity you chose",
-    "Your daily time budget",
+    "Your target date, planning checkpoint and daily time budget",
     "What usually gets in the way and any optional answers you provide",
     "Practice titles, a short progress summary and review note when available",
-    "The current practice and your feedback when you request a weekly change",
+    "The current practice, days remaining, completed days, effort and your feedback when you request a weekly change",
   ],
   notSent: ["Your account name", "Your account email", "Individual completion notes"],
   detail:

@@ -80,7 +80,7 @@ function practiceFromNodes(
     cadence: role === "primary" ? "daily" : "weekly",
     cadence_n: 1,
     full_variant: ladder.length ? { ...week1, ladder } : week1,
-    easy_variant: easyFromTree(easy, week1.steps[0]),
+    easy_variant: { ...easyFromTree(nodes[0]?.easy ?? easy, week1.steps[0]), ...(nodes[1]?.easy ? { ladder: [easyFromTree(nodes[1].easy, nodes[1].instructions[0])] } : {}) },
   };
 }
 
@@ -162,6 +162,10 @@ export function dailyPlanFromTree(
     // survived: an on-device tree is local even when all four branches are used.
     plan_source: source !== "edge-ai" || !containsAi ? "local" : containsLocalRepair ? "mixed" : "ai",
     personalization_context: answers.context ?? [],
+    target_date: answers.targetDate ?? null,
+    season_length_days: answers.daysRemaining ?? null,
+    stages: tree.stages,
+    reality_check: tree.realityCheck,
     branch_labels: labels,
     practices: repaired,
   };
@@ -170,7 +174,7 @@ export function dailyPlanFromTree(
     // Visible in the Metro logs, so "the plan looks like a template" can be told
     // apart from "the draft was thrown away" without guessing.
     console.warn("[plan] the drafted plan could not be saved as written:", problems);
-    return { ...base, plan_source: "local", personalization_context: answers.context ?? [], branch_labels: labels };
+    return { ...base, plan_source: "local", personalization_context: answers.context ?? [], target_date: answers.targetDate ?? null, season_length_days: answers.daysRemaining ?? null, stages: tree.stages, reality_check: tree.realityCheck, branch_labels: labels };
   }
   if (fromDraft < repaired.length) {
     console.warn(`[plan] ${repaired.length - fromDraft} branch(es) fell back to the curated library`);
@@ -236,6 +240,10 @@ export function planFromSeason(snapshot: DailySnapshot, seasonId: string): Daily
     plan_version: season.plan_version,
     plan_source: season.plan_source_verified ? season.plan_source : "unknown",
     personalization_context: season.personalization_context ?? [],
+    target_date: season.target_date ?? null,
+    season_length_days: season.season_length_days ?? null,
+    stages: season.stages,
+    reality_check: season.reality_check,
     plan_summary: season.plan_summary,
     safety_note: season.safety_note,
     branch_labels: season.branch_labels,

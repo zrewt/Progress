@@ -101,7 +101,7 @@ export function AuthScreen() {
           <Body style={styles.heroCopy}>
             {tab === "signin"
               ? "Your branches are exactly where you left them."
-              : "Choose who you are becoming and one 30-day goal. Then grow a tree that shows the change."}
+              : "Tell it what you want and by when. Grow a tree from the practice you log."}
           </Body>
         </View>
 

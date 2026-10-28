@@ -2,9 +2,12 @@ import type { CompletionEvent, DailySnapshot, Practice, Season } from "./daily-t
 import { addDays, daysBetween, isCounted, localDate } from "./progression";
 import { planWeek } from "./engine/week";
 import { nextReviewWeek } from "./review";
+import { detailFor, paceLine } from "./engine/rolling";
 
 export interface TodayView {
   today: string;
+  continuation: boolean;
+  pace: string;
   season: Season;
   primary: Practice;
   supporting: Practice[];
@@ -35,7 +38,7 @@ function missedDaysBefore(events: CompletionEvent[], season: Season, today: stri
     events.filter((event) => !event.undone_at && (isCounted(event) || event.kind === "rest")).map((event) => event.local_date),
   );
   let missed = 0;
-  for (let offset = 1; offset <= 30; offset += 1) {
+  for (let offset = 1; offset <= (season.season_length_days ?? 30); offset += 1) {
     const date = addDays(today, -offset);
     if (date < season.started_on) break;
     if (qualifying.has(date)) break;
@@ -57,8 +60,11 @@ export function todayState(snapshot: DailySnapshot, now: Date = new Date()): Tod
   const practices = snapshot.practices.filter(
     (practice) => practice.season_id === season.id && practice.active,
   );
-  const primary = practices.find((practice) => practice.role === "primary") ?? practices[0];
-  if (!primary) return null;
+  const original = practices.find((practice) => practice.role === "primary") ?? practices[0];
+  if (!original) return null;
+  const week = planWeek(season.started_on, today, season.season_length_days);
+  const detail = detailFor(snapshot, season, original, week);
+  const primary = detail.practice;
   const events = snapshot.events.filter((event) => event.season_id === season.id && !event.undone_at);
   const todayEvents = events.filter((event) => event.local_date === today);
   const countedToday = todayEvents.some(isCounted);
@@ -82,29 +88,31 @@ export function todayState(snapshot: DailySnapshot, now: Date = new Date()): Tod
   return {
     today,
     season,
+    continuation: detail.continuation,
+    pace: paceLine(snapshot, season, today),
     primary,
-    supporting: practices.filter((practice) => practice.id !== primary.id),
+    supporting: practices.filter((practice) => practice.id !== primary.id).map(p => detailFor(snapshot, season, p, week).practice),
     todayEvents,
     countedToday,
     restedToday,
     skippedToday,
     streak: snapshot.progress?.current_streak ?? 0,
     bestStreak: snapshot.progress?.best_streak ?? 0,
-    dayNumber: Math.max(1, Math.min(30, daysBetween(season.started_on, today) + 1)),
-    week: planWeek(season.started_on, today),
+    dayNumber: Math.max(1, Math.min(season.season_length_days ?? 30, daysBetween(season.started_on, today) + 1)),
+    week,
     missedDays,
     welcomeBack: missedDays >= 2 && !countedToday,
     easierByDefault: season.week_mode === "lighter" && (!season.week_mode_until || today <= season.week_mode_until),
-    reviewWeek: nextReviewWeek(season.started_on, today, reviewed),
+    reviewWeek: nextReviewWeek(season.started_on, today, reviewed, season.season_length_days ? season.ends_on : undefined),
     recent,
     lastCountedDate: lastCounted,
   };
 }
 
 /** The practice to show for today: the daily one, or the first weekly one due. */
-export function isSupportingDue(practice: Practice, events: CompletionEvent[], today: string) {
+export function isSupportingDue(practice: Practice, events: CompletionEvent[], today: string, season?: Season) {
   if (practice.cadence === "daily") return true;
-  const weekStart = addDays(today, -((new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7));
+  const weekStart = season?.season_length_days ? addDays(season.started_on, Math.floor(daysBetween(season.started_on, today) / 7) * 7) : addDays(today, -((new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7));
   const doneThisWeek = events.filter(
     (event) => event.practice_id === practice.id && isCounted(event) && event.local_date >= weekStart,
   ).length;

@@ -34,10 +34,11 @@ import {
   IDENTITIES,
   PILLAR_MAP,
   TIME_OPTIONS,
-  goalsForIdentity,
 } from "../lib/pillars";
 import { assessGoalSafety } from "../lib/safety";
 import { planHistory } from "../lib/engine/history";
+import { planningLeg } from "../lib/engine/schedule";
+import { addDays, localDate } from "../lib/progression";
 import type { BlockerId, IdentityId, OnboardingAnswers, PersonalizationQuestion } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { BotanicalBranch } from "./BotanicalBranch";
@@ -57,10 +58,9 @@ const STEPS = [
   },
   {
     key: "02",
-    label: "The 30-day goal",
-    question: "What changes in 30 days?",
-    helper:
-      "Pick a starting goal or write your own, then name what usually gets in the way so your plan counters it.",
+    label: "Your goal and date",
+    question: "Tell it what you want and by when",
+    helper: "Describe your goal in your own words and choose a target date.",
   },
   {
     key: "03",
@@ -340,6 +340,8 @@ export function Onboarding() {
   const [questions, setQuestions] = useState<PersonalizationQuestion[]>([]);
   const [questionResult, setQuestionResult] = useState<QuestionResult | null>(null);
   const [responses, setResponses] = useState<string[]>([]);
+  const [targetDate, setTargetDate] = useState("");
+  const [acceptFirstLeg, setAcceptFirstLeg] = useState(false);
   // Asked once, before the first question, so the plan appears the moment the
   // last answer is given instead of interrupting the payoff with a decision.
   const [consentOpen, setConsentOpen] = useState(!aiAllowed);
@@ -360,13 +362,14 @@ export function Onboarding() {
 
   const current = STEPS[step];
   const goal = (answers.goal ?? "").trim();
-  const suggestedGoals = goalsForIdentity(answers.identity ?? "creator");
-  const customGoal = suggestedGoals.includes(goal) ? "" : (answers.goal ?? "");
+  const timezone = snapshot?.profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const currentDate = localDate(new Date(), timezone);
+  const leg = planningLeg(currentDate, targetDate, acceptFirstLeg);
   const safety = assessGoalSafety(goal);
   const previewPlan =
     preview && answers.identity && answers.goal && answers.timeBudget
       ? dailyPlanFromTree(
-          { identity: answers.identity, goal: answers.goal, blocker: answers.blocker ?? "consistency", timeBudget: answers.timeBudget, context: questions.flatMap((q, i) => responses[i]?.trim() ? [{ question: q.question, answer: responses[i].trim() }] : []) },
+          { identity: answers.identity, goal: answers.goal, blocker: answers.blocker ?? "consistency", timeBudget: answers.timeBudget, context: questions.flatMap((q, i) => responses[i]?.trim() ? [{ question: q.question, answer: responses[i].trim() }] : []), ...(leg.kind === "valid" ? { targetDate: leg.target, legEnd: leg.end, daysRemaining: leg.length } : {}) },
           preview.tree,
           preview.source,
         )
@@ -376,21 +379,14 @@ export function Onboarding() {
     step === 0
       ? Boolean(answers.identity)
       : step === 1
-        ? goal.length >= 3 && safety.safe && Boolean(answers.blocker)
+        ? goal.length >= 3 && safety.safe && Boolean(answers.blocker) && leg.kind === "valid"
         : step === 2
           ? Boolean(answers.timeBudget)
           : step === 3 ? true : Boolean(preview);
 
   function chooseIdentity(identity: IdentityId) {
     setPreview(null);
-    setAnswers((value) => {
-      const suggested = goalsForIdentity(value.identity ?? identity);
-      return {
-        ...value,
-        identity,
-        goal: value.goal && suggested.includes(value.goal) ? "" : value.goal,
-      };
-    });
+    setAnswers((value) => ({ ...value, identity }));
   }
 
   function fullAnswers(overrideBudget?: string): OnboardingAnswers {
@@ -399,6 +395,7 @@ export function Onboarding() {
       goal: goal.slice(0, 120),
       blocker: (answers.blocker as BlockerId) ?? "consistency",
       timeBudget: overrideBudget ?? answers.timeBudget ?? "15",
+      ...(leg.kind === "valid" ? { targetDate: leg.target, legEnd: leg.end, daysRemaining: leg.length } : {}),
       context: questions.flatMap((q, i) => responses[i]?.trim() ? [{ question: q.question, answer: responses[i].trim() }] : []),
     };
   }
@@ -541,27 +538,10 @@ export function Onboarding() {
 
           {step === 1 ? (
             <View>
-              <View style={styles.goalChips}>
-                {suggestedGoals.map((option) => (
-                  <GoalChip
-                    key={option}
-                    label={option}
-                    selected={goal === option}
-                    onSelect={() => {
-                      setPreview(null);
-                      setAnswers((value) => ({
-                        ...value,
-                        goal: value.goal === option ? "" : option,
-                      }));
-                    }}
-                  />
-                ))}
-              </View>
-
               <View style={styles.goalField}>
                 <Field
-                  label="Or write your own"
-                  value={customGoal}
+                  label="Your goal"
+                  value={answers.goal ?? ""}
                   onChangeText={(text) => {
                     setPreview(null);
                     setAnswers((value) => ({ ...value, goal: text }));
@@ -571,9 +551,18 @@ export function Onboarding() {
                   maxLength={120}
                   returnKeyType="done"
                 />
-                <Micro style={styles.goalHint}>
-                  One change · 30 days · your words
-                </Micro>
+                <Micro style={styles.goalHint}>Your goal, in your words.</Micro>
+              </View>
+              <View style={{ marginTop: 20, gap: 10 }}>
+                <Label>Target date</Label>
+                <View style={styles.goalChips}>
+                  {[14, 28, 56, 112].map((days) => <GoalChip key={days} label={`${days} days`} selected={targetDate === addDays(currentDate, days)} onSelect={() => { setTargetDate(addDays(currentDate, days)); setAcceptFirstLeg(false); setPreview(null); }} />)}
+                </View>
+                <Field label="Or enter a date (YYYY-MM-DD)" value={targetDate} onChangeText={(value) => { setTargetDate(value); setAcceptFirstLeg(false); setPreview(null); }} placeholder="YYYY-MM-DD" maxLength={10} />
+                {targetDate && leg.kind === "invalid" ? <Body>Enter a valid date in YYYY-MM-DD format.</Body> : null}
+                {leg.kind === "too-soon" ? <Body>Choose at least two weeks. The earliest available date is {leg.earliest}.</Body> : null}
+                {leg.kind === "first-leg" ? <><Body>That goal is further away. You can plan a first 112-day leg, with a checkpoint on {leg.checkpoint}.</Body><QuietButton label="Plan the first leg" onPress={() => setAcceptFirstLeg(true)} /></> : null}
+                {leg.kind === "valid" && leg.target !== leg.end ? <Body>Your target is {leg.target}; this first leg ends {leg.end}.</Body> : null}
               </View>
 
               {goal.length >= 3 && !safety.safe ? (
@@ -725,8 +714,10 @@ export function Onboarding() {
                 </View>
               </View>
 
+              {previewPlan.reality_check ? <View style={{ gap: 8 }}><Label>Reality check: {previewPlan.reality_check.level}</Label><Body>{previewPlan.reality_check.explanation}</Body><QuietButton label="Adjust goal or date" onPress={() => { setPreview(null); setStep(1); }} /></View> : null}
+              {previewPlan.stages?.map((stage, index) => <Body key={index}>{stage.title} · {stage.start} to {stage.end} (end exclusive){"\n"}{stage.outcome}</Body>)}
               <Label style={{ marginTop: 18, marginBottom: 8 }}>
-                Your first week
+                Your first two weeks
               </Label>
 
               {previewPlan.practices.map((practice) => {
@@ -742,7 +733,7 @@ export function Onboarding() {
                       </View>
                       <Text style={styles.seedDuration}>{practice.full_variant.minutes} min</Text>
                     </View>
-                    <Display style={styles.seedTitle}>{practice.title}</Display>{practice.role === "primary" && practice.full_variant.steps[0] ? <Text style={styles.seedDesc}>First action: {practice.full_variant.steps[0]}</Text> : null}{practice.full_variant.ladder && practice.full_variant.ladder.length > 0 ? <Text style={styles.seedDesc}>By week 4: {practice.full_variant.ladder[practice.full_variant.ladder.length - 1].title}</Text> : null}
+                    <Display style={styles.seedTitle}>{practice.title}</Display>{practice.role === "primary" && practice.full_variant.steps[0] ? <Text style={styles.seedDesc}>First action: {practice.full_variant.steps[0]}</Text> : null}{practice.full_variant.ladder && practice.full_variant.ladder.length > 0 ? <Text style={styles.seedDesc}>Next week: {practice.full_variant.ladder[practice.full_variant.ladder.length - 1].title}</Text> : null}
                     <Text style={styles.seedDesc}>{practice.why}</Text>
                     <Text style={styles.seedDesc}>
                       Easier version: {practice.easy_variant.minutes} min — {practice.easy_variant.title.toLowerCase()}

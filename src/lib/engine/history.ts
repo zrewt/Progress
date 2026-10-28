@@ -63,7 +63,7 @@ export function planHistory(snapshot: DailySnapshot | null): PlanHistory | null 
   return {
     seasons: Math.max(1, snapshot.seasons.length),
     days_practised: practisedDays.size,
-    days_planned: Math.max(1, Math.min(30, daysBetween(season.started_on, season.ends_on))),
+    days_planned: Math.max(1, Math.min(season.season_length_days ?? 30, daysBetween(season.started_on, season.ends_on))),
     kept,
     dropped,
     average_effort: averageEffort,

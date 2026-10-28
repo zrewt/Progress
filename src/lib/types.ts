@@ -74,9 +74,13 @@ export interface OnboardingAnswers {
   blocker: BlockerId;
   timeBudget: string;
   context?: PersonalizationAnswer[];
+  targetDate?: string;
+  legEnd?: string;
+  daysRemaining?: number;
 }
 
 export interface GeneratedNode {
+  easy?: GeneratedEasy;
   title: string;
   duration: string;
   description: string;
@@ -88,8 +92,13 @@ export interface GeneratedEasy {
   steps: string[];
 }
 
+export interface PlanStage { start: string; end: string; title: string; outcome: string }
+export interface RealityCheck { level: "comfortable" | "stretch" | "very tight"; explanation: string }
+
 export interface GeneratedTree {
   primaryBranch?: PillarId;
+  stages?: PlanStage[];
+  realityCheck?: RealityCheck;
   summary: string;
   safetyNote: string;
   pillars: {

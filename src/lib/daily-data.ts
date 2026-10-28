@@ -1,3 +1,4 @@
+import type { WeeklyDraft } from "../../supabase/functions/generate-tree/plan-validation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PersonalizationAnswer } from "./types";
 import type { DailyPlan, DailySnapshot, EventInput, CompletionEvent, Progress, Season, SeasonHistoryEntry, WeeklyReview, PracticeDraft } from "./daily-types";
@@ -18,19 +19,21 @@ export class DailyData {
   }
   async load(userId: string): Promise<DailySnapshot> {
     // Never substitute [] for a failed read, generate a plan, or write during hydration.
-    const [profile, seasons, practices, milestones, events, reviews] = await Promise.all([
+    const [profile, seasons, practices, milestones, events, reviews, practiceWeeks] = await Promise.all([
       this.sb.from("profiles").select("id,display_name,timezone,blocker,ai_consent_version,ai_consent_at").eq("id", userId).maybeSingle(),
       this.sb.from("seasons").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
       this.sb.from("practices").select("*").eq("user_id", userId).order("sort_order"),
       this.sb.from("milestones").select("*").eq("user_id", userId),
       this.sb.from("completion_events").select("*").eq("user_id", userId).order("occurred_at", { ascending: false }),
       this.sb.from("weekly_reviews").select("*").eq("user_id", userId).order("week_start"),
+      this.sb.from("practice_weeks").select("*").eq("user_id", userId).order("effective_week"),
     ]);
-    if ([profile, seasons, practices, milestones, events, reviews].some((r) => r.error)) throw new Error("We couldn’t load your journal. Nothing has been overwritten. Please try again.");
+    if ([profile, seasons, practices, milestones, events, reviews, practiceWeeks].some((r) => r.error)) throw new Error("We couldn’t load your journal. Nothing has been overwritten. Please try again.");
     const list = seasons.data as Season[];
     const season = list.find((s) => s.status === "active") ?? list[0];
     return {
       profile: profile.data,
+      practiceWeeks: practiceWeeks.data ?? [],
       seasons: list,
       practices: practices.data ?? [],
       milestones: milestones.data ?? [],
@@ -56,6 +59,7 @@ export class DailyData {
       p_season_id: seasonId, p_week_start: weekStart, p_difficulty: difficulty, p_note: note, p_apply: apply,
     });
   }
+  acceptWeek(seasonId: string, draft: WeeklyDraft) { return this.rpc<number>("accept_practice_week", { p_season_id: seasonId, p_draft: draft }); }
   endSeason(seasonId: string, status: "completed" | "archived") { return this.rpc<null>("end_season", { p_season_id: seasonId, p_status: status }); }
   history() { return this.rpc<SeasonHistoryEntry[]>("season_history", {}); }
   recordConsent(version: string) { return this.rpc<null>("record_ai_consent", { p_version: version }); }

@@ -12,14 +12,15 @@ export function reviewDecision(adherence: number, difficulty: number): ReviewDec
   return "same";
 }
 
-export function adherenceFor(events: Pick<CompletionEvent, "kind" | "undone_at" | "local_date">[], weekStart: string) {
-  const weekEnd = addDays(weekStart, 6);
+export function adherenceFor(events: Pick<CompletionEvent, "kind" | "undone_at" | "local_date">[], weekStart: string, endsOn?: string) {
+  const denominator = endsOn ? Math.max(1, Math.min(7, daysBetween(weekStart, endsOn))) : 7;
+  const weekEnd = addDays(weekStart, denominator - 1);
   const days = new Set(
     events
       .filter((event) => isCounted(event) && event.local_date >= weekStart && event.local_date <= weekEnd)
       .map((event) => event.local_date),
   );
-  return { practiced: days.size, adherence: Math.min(1, days.size / 7) };
+  return { practiced: days.size, adherence: Math.min(1, days.size / denominator), denominator };
 }
 
 export function reviewProposal(decision: ReviewDecision) {
@@ -55,8 +56,9 @@ export function alignedWeeks(startedOn: string, today: string) {
 }
 
 /** The most recent finished week that has no review yet, or null. */
-export function nextReviewWeek(startedOn: string, today: string, reviewed: string[]) {
-  const finished = alignedWeeks(startedOn, today).filter((weekStart) => addDays(weekStart, 6) < today);
+export function nextReviewWeek(startedOn: string, today: string, reviewed: string[], endsOn?: string) {
+  const boundary = endsOn && today > endsOn ? endsOn : today;
+  const finished = alignedWeeks(startedOn, boundary).filter((weekStart) => (!endsOn || weekStart < endsOn) && (addDays(weekStart, 7) <= today || !!endsOn && endsOn <= today));
   return [...finished].reverse().find((weekStart) => !reviewed.includes(weekStart)) ?? null;
 }
 

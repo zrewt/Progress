@@ -211,7 +211,7 @@ export function buildPlan(input: PlanInput): DailyPlan {
     plan_source: input.plan_source ?? "local",
     plan_summary:
       input.plan_summary ??
-      `Thirty days on "${input.goal.trim()}": one daily practice, three lighter ones across the week, every version inside ${budget} minutes.`,
+      `Your plan for "${input.goal.trim()}": one daily practice, three lighter ones across the week, every version inside ${budget} minutes.`,
     safety_note:
       input.safety_note ??
       "Go at a pace you could repeat tomorrow. Stop at sharp pain or exhaustion; a smaller day still counts.",

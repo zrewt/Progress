@@ -11,10 +11,10 @@ import { daysBetween } from "../progression";
 export const PLAN_WEEKS = 4;
 
 /** Which week of the season a date falls in: 1-4, clamped at both ends. */
-export function planWeek(startedOn: string, today: string): number {
+export function planWeek(startedOn: string, today: string, length?: number | null): number {
   const dayIndex = daysBetween(startedOn, today);
   if (!Number.isFinite(dayIndex)) return 1;
-  return Math.max(1, Math.min(PLAN_WEEKS, Math.floor(Math.max(0, dayIndex) / 7) + 1));
+  return Math.max(1, Math.min(length ? Math.ceil(length / 7) : PLAN_WEEKS, Math.floor(Math.max(0, dayIndex) / 7) + 1));
 }
 
 /** A practice's variant for one week. Week 1 is the variant; later weeks are its ladder. */
@@ -28,7 +28,7 @@ export function rungFor(variant: Variant | null | undefined, week: number): Rung
   if (week <= 1 || ladder.length === 0) return base;
   // A short ladder holds its last real step rather than inventing one, so a
   // plan never jumps backwards or forward to an empty week.
-  const index = Math.min(ladder.length - 1, Math.min(PLAN_WEEKS, week) - 2);
+  const index = Math.min(ladder.length - 1, week - 2);
   const rung = ladder[Math.max(0, index)];
   return { title: rung.title || base.title, minutes: rung.minutes, steps: rung.steps };
 }

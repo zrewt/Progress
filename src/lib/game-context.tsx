@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState, Linking } from "react-native";
 import type { User } from "@supabase/supabase-js";
 import * as Crypto from "expo-crypto";
+import type { WeeklyDraft } from "../../supabase/functions/generate-tree/plan-validation";
 import { generateTree, type TreeSource } from "./gemini";
 import { getSupabase, isSupabaseConfigured } from "./supabase";
 import { AccountScope, DailyData } from "./daily-data";
@@ -34,6 +35,7 @@ interface GameContextValue {
   dismissUndo: () => void;
   editPlan: (plan: DailyPlan) => Promise<boolean>;
   replacePractice: (practiceId: string, draft: DailyPlan["practices"][number]) => Promise<boolean>;
+  acceptWeek: (draft: WeeklyDraft) => Promise<boolean>;
   submitReview: (weekStart: string, difficulty: number, note: string | null, apply: boolean) => Promise<string | null>;
   finishSeason: (plan: DailyPlan) => Promise<boolean>;
   loadHistory: () => Promise<void>;
@@ -281,6 +283,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     catch { if (scope.isCurrent(token)) setError("That practice could not be replaced. Your plan is unchanged."); return false; }
     finally { if (scope.isCurrent(token)) setAuthBusy(false); }
   }
+  async function acceptWeek(draft: WeeklyDraft) {
+    if (!data || !activeSeason || loadFailed) return false;
+    const token = scope.token();
+    try { await data.acceptWeek(activeSeason.id, draft); if (!scope.isCurrent(token)) return false; await retryLoad(); return true; }
+    catch { if (scope.isCurrent(token)) setError("That week could not be saved. Refresh before retrying; your approved practice continues."); return false; }
+  }
   async function submitReview(weekStart: string, difficulty: number, note: string | null, apply: boolean) {
     if (!data || !activeSeason || loadFailed) return null;
     const token = scope.token();
@@ -371,7 +379,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     aiAllowed: Boolean(snapshot?.profile?.ai_consent_at) && snapshot?.profile?.ai_consent_version === AI_CONSENT_VERSION,
     recovering, queueCount, syncState, syncNow,
     signIn, signUp, signOut, retryLoad, submitOnboarding, startSeason, recordEvent, undoEvent, dismissUndo,
-    editPlan, replacePractice, submitReview, finishSeason, loadHistory, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext,
+    editPlan, replacePractice, acceptWeek, submitReview, finishSeason, loadHistory, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext,
     requestPasswordReset, resendConfirmation, updatePassword, cancelRecovery, deleteAccount, completeNode, dismissCelebration, clearError,
   };
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

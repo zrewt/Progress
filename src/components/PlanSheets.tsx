@@ -5,6 +5,8 @@ import { ArrowRight, X } from "lucide-react-native";
 import { useGame, planVersionOf } from "../lib/game-context";
 import { dailyPlanFromTree, planFromSeason } from "../lib/daily-adapter";
 import { generateTree } from "../lib/gemini";
+import { planningLeg } from "../lib/engine/schedule";
+import { addDays, daysBetween, localDate } from "../lib/progression";
 import { planHistory } from "../lib/engine/history";
 import { assessGoalSafety } from "../lib/safety";
 import { BUDGETS, type Budget } from "../lib/plans";
@@ -82,10 +84,11 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
         blocker: plan.blocker,
         timeBudget: String(budget),
         context: plan.personalization_context ?? [],
+        ...(plan.target_date && today ? { targetDate: plan.target_date, legEnd: today.season.ends_on, daysRemaining: Math.max(1, daysBetween(today.today, today.season.ends_on)) } : {}),
       };
       const built = await generateTree(answers, { allowAi: aiAllowed, history: planHistory(snapshot) });
       const next = dailyPlanFromTree(answers, built.tree, built.source);
-      setDraft({ ...next, plan_version: plan.plan_version + 1 });
+      setDraft({ ...next, target_date: plan.target_date, season_length_days: plan.season_length_days, stages: plan.stages, plan_version: plan.plan_version + 1 });
     } finally {
       setBusy(false);
     }
@@ -104,12 +107,12 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
       <Body style={styles.lead}>
         Changing the goal or the daily size starts a new version. Everything you have already done stays in your history.
       </Body>
-      <Label style={{ marginTop: 6 }}>Your 30-day goal</Label>
+      <Label style={{ marginTop: 6 }}>Your goal</Label>
       <TextInput
         value={goal}
         onChangeText={(value) => { setGoal(value); setDraft(null); }}
         maxLength={140}
-        accessibilityLabel="Your 30-day goal"
+        accessibilityLabel="Your goal"
         selectionColor={colors.copper}
         style={styles.input}
       />
@@ -143,7 +146,11 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
   const [goal, setGoal] = useState("");
   const [budget, setBudget] = useState<Budget>(15);
   const [busy, setBusy] = useState(false);
+  const [target, setTarget] = useState("");
+  const [firstLeg, setFirstLeg] = useState(false);
   if (!visible || !today || !snapshot) return null;
+  const date = localDate(new Date(), snapshot.profile?.timezone ?? "UTC");
+  const leg = planningLeg(date, target, firstLeg);
   const plan = planFromSeason(snapshot, today.season.id);
   const progress = snapshot.progress;
   const grown = progress?.unlocked_milestones.length ?? 0;
@@ -155,16 +162,16 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
   async function keepGoing() {
     if (!plan) return;
     setBusy(true);
-    await finishSeason(planVersionOf(plan, plan.plan_version + 1));
+    await finishSeason(planVersionOf({ ...plan, target_date: null, season_length_days: null, stages: undefined, reality_check: undefined }, plan.plan_version + 1));
     setBusy(false);
     onClose();
   }
 
   async function beginNew() {
-    if (!plan) return;
+    if (!plan || leg.kind !== "valid") return;
     setBusy(true);
     try {
-      const answers: OnboardingAnswers = { identity: plan.identity, goal: goal.trim(), blocker: plan.blocker, timeBudget: String(budget) };
+      const answers: OnboardingAnswers = { identity: plan.identity, goal: goal.trim(), blocker: plan.blocker, timeBudget: String(budget), targetDate: leg.target, legEnd: leg.end, daysRemaining: leg.length };
       const built = await generateTree(answers, { allowAi: aiAllowed, history: planHistory(snapshot) });
       setNextPlan(dailyPlanFromTree(answers, built.tree, built.source));
     } finally { setBusy(false); }
@@ -203,7 +210,7 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
 
       {newGoalOpen ? (
         <>
-          <Label>What is the next 30 days about?</Label>
+          <Label>Tell it what you want and by when</Label>
           <TextInput
             value={goal}
             onChangeText={(value) => { setGoal(value); setNextPlan(null); }}
@@ -214,6 +221,11 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
             accessibilityLabel="New goal"
             style={styles.input}
           />
+          <Label>Target date (YYYY-MM-DD)</Label>
+          <TextInput accessibilityLabel="Target date" value={target} maxLength={10} onChangeText={v => { setTarget(v); setFirstLeg(false); setNextPlan(null); }} style={styles.input} />
+          <QuietButton label="Choose four weeks from today" onPress={() => { setTarget(addDays(date, 28)); setFirstLeg(false); }} />
+          {leg.kind === "too-soon" ? <Body>The earliest available date is {leg.earliest}.</Body> : null}
+          {leg.kind === "first-leg" ? <><Body>Keep your target and start with a 112-day leg ending {leg.checkpoint}.</Body><QuietButton label="Plan this first leg" onPress={() => setFirstLeg(true)} /></> : null}
           {!safety.safe ? <Body>{safety.reason}</Body> : null}
           <Label style={{ marginTop: 14 }}>Minutes a day</Label>
           <BudgetChips value={budget} onChange={(value) => { setBudget(value); setNextPlan(null); }} />
@@ -227,22 +239,23 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
             label={busy ? "Building" : "Generate a draft"}
             onPress={() => void beginNew()}
             loading={busy}
-            disabled={busy || authBusy || goal.trim().length < 3 || !safety.safe}
+            disabled={busy || authBusy || goal.trim().length < 3 || !safety.safe || leg.kind !== "valid"}
             style={{ marginTop: 16 }}
           />}
           <QuietButton label="Back" onPress={() => { setNextPlan(null); setNewGoalOpen(false); }} disabled={busy} />
         </>
       ) : (
         <>
-          <PrimaryButton
-            label={busy ? "Beginning" : "Continue this goal for 30 more days"}
+          {!today.season.season_length_days ? <PrimaryButton
+            label={busy ? "Beginning" : "Continue the legacy 30-day plan"}
             onPress={() => void keepGoing()}
             loading={busy}
             disabled={busy || authBusy}
             icon={busy ? undefined : <ArrowRight size={15} strokeWidth={2} color={colors.ink950} />}
             style={{ marginTop: 8 }}
           />
-          <QuietButton label="Choose a new goal" onPress={() => setNewGoalOpen(true)} disabled={busy} />
+          : null}
+          <QuietButton label="Choose a goal and target date" onPress={() => { setGoal(plan?.goal ?? ""); setNewGoalOpen(true); }} disabled={busy} />
         </>
       )}
       <Micro style={{ marginTop: 6, textAlign: "center", textTransform: "none", letterSpacing: 0.3 }}>

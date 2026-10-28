@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RotateCcw, X } from "lucide-react-native";
 import { useGame } from "../lib/game-context";
+import { daysBetween } from "../lib/progression";
 import type { Practice } from "../lib/daily-types";
 import type { TreeNode } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
@@ -29,7 +30,7 @@ export function Dashboard() {
 
   const firstName = (profile.displayName || user?.name || "").split(" ")[0];
   const season = today.season;
-  const daysLeft = Math.max(0, 30 - today.dayNumber);
+  const daysLeft = Math.max(0, daysBetween(today.today, season.ends_on));
   const grown = nodes.filter((node) => node.status === "completed").length;
 
   return (
@@ -59,7 +60,7 @@ export function Dashboard() {
 
         <View style={styles.seasonRow}>
           <Label>
-            Season · Day {today.dayNumber} of 30
+            Season · Day {today.dayNumber} of {season.season_length_days ?? 30}
           </Label>
           <Micro style={{ color: colors.lichen }}>
             {today.streak} day streak · best {today.bestStreak}
@@ -71,6 +72,7 @@ export function Dashboard() {
           <DisplayItalic style={{ color: colors.lichen }}>one thing today.</DisplayItalic>
         </Display>
         <Text style={styles.goalLine} numberOfLines={2}>“{season.goal}”</Text>
+        {season.season_length_days ? <Micro style={{ marginTop: 8, textTransform: "none" }}>{today.pace}</Micro> : null}
 
         {today.welcomeBack ? (
           <View style={styles.welcome}>
