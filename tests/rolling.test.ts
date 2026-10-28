@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { durationCap, validateWeeklyDraft, validOutline, validRealityCheck } from "../supabase/functions/generate-tree/plan-validation";
+import { durationCap, normaliseStages, stageRanges as serverStageRanges, validateWeeklyDraft, validRealityCheck } from "../supabase/functions/generate-tree/plan-validation";
 import { checkpointWeek, detailFor, localWeeklyAlternative } from "../src/lib/engine/rolling";
 import { planWeek } from "../src/lib/engine/week";
 import { nextReviewWeek, adherenceFor } from "../src/lib/review";
@@ -49,10 +49,36 @@ test("weekly shape validates both versions, duration cap, ids and local alternat
   assert.equal(validateWeeklyDraft({ ...draft, practices: [{ ...draft.practices[0], easy_variant: { ...variant, minutes: 3 } }] }, [{ id: "p", minutes: 5 }], 15), false);
 });
 
-test("outline and advisory reality check are constrained", () => {
-  const stages = stageRanges(season.started_on, 15).map(s => ({ ...s, title: "Opening scene", outcome: "A draft of the garden scene exists." }));
-  assert.equal(validOutline(stages, season.started_on, 15), true);
-  assert.equal(validOutline(stages.slice(1), season.started_on, 15), false);
+test("stage dates are the server's, so a model date or count cannot reject the plan", () => {
+  const start = season.started_on, length = 15;
+  const canonical = serverStageRanges(start, length);
+  // Inclusive end dates and a shuffled count are both corrected, not rejected.
+  const wrongDates = canonical.map((range) => ({ ...range, title: "Opening scene", outcome: "A draft of the garden scene exists." }));
+  const corrected = normaliseStages(wrongDates.map((range) => ({ ...range, end: range.start })), start, length);
+  assert.deepEqual(corrected.map(({ start: from, end }) => ({ start: from, end })), canonical);
+  assert.equal(corrected[0].title, "Opening scene");
+
+  const five = [1, 2, 3, 4, 5].map((n) => ({ title: `Part ${n}`, outcome: "A draft of that part exists." }));
+  const fromFive = normaliseStages(five, start, length);
+  assert.equal(fromFive.length, canonical.length);
+  assert.deepEqual(fromFive.map((stage) => stage.title), ["Part 1", "Part 2", "Part 3"]);
+
+  const fromOne = normaliseStages([{ title: "Part 1", outcome: "A draft exists." }], start, length);
+  assert.deepEqual(fromOne.map((stage) => stage.title), ["Part 1", "Stage 2", "Stage 3"]);
+
+  // Unsafe outline text is replaced only for that stage; the rest survives.
+  const unsafe = normaliseStages([{ title: "Eat 900 calories", outcome: "A draft exists." }], start, length);
+  assert.equal(unsafe[0].title, "Stage 1");
+  assert.equal(unsafe.length, canonical.length);
+
+  // The server and the app must divide a leg identically, or the pace line and
+  // the outline would disagree about which stage is current.
+  for (const span of [14, 15, 28, 29, 56, 57, 112]) {
+    assert.deepEqual(serverStageRanges(start, span), stageRanges(start, span));
+  }
+});
+
+test("the advisory reality check is still constrained", () => {
   assert.equal(validRealityCheck({ level: "very tight", explanation: "Use this leg to draft the opening rather than a whole novel." }), true);
   assert.equal(validRealityCheck({ level: "guaranteed", explanation: "Success." }), false);
 });

@@ -13,7 +13,7 @@ import {
   validateStepsWithinBudget,
 } from "./safety-rules.ts";
 import { validateQuestions } from "./questions.ts";
-import { durationCap, validOutline, validRealityCheck, validateWeeklyDraft } from "./plan-validation.ts";
+import { durationCap, normaliseStages, stageRanges, validRealityCheck, validateWeeklyDraft } from "./plan-validation.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -186,6 +186,8 @@ function buildPrompt(
   },
   history: History | null,
 ) {
+  const outlineStart = new Date(Date.parse(`${p.legEnd}T12:00:00Z`) - p.daysRemaining * 86400000).toISOString().slice(0, 10);
+  const outline = stageRanges(outlineStart, p.daysRemaining);
   return `You are the plan writer for a goal-planning app. You are writing one specific person's plan, not a plan for a category of person. Return JSON only.
 
 WHO THIS IS
@@ -209,7 +211,8 @@ STEP 2 — THE BRIEF DRIVES THE PLAN
 Outcome shapes the final outline stage. Week_one shapes week 1. The trap shapes the two-minute version. When research is useful, turn it into a concrete step and name an appropriate kind of source. If a step would still make sense under a different brief, it is filler: replace it.
 
 STEP 3 — THE PRIMARY BRANCH IS THE SPINE: A WHOLE-LEG OUTLINE, TWO WEEKS OF DETAIL
-Return ${p.daysRemaining <= 28 ? 3 : p.daysRemaining <= 56 ? 4 : 5} outline stages as contiguous, exclusive-end date ranges from ${new Date(Date.parse(`${p.legEnd}T12:00:00Z`) - p.daysRemaining * 86400000).toISOString().slice(0, 10)} to ${p.legEnd}. Divide the days evenly, giving extra days to the first stages. Stages are not tree tiers or weeks. Outline outcomes are not instructions for a finished practice.
+Return ${outline.length} outline stages on exactly these dates. Each end is exclusive; copy the dates, do not recalculate them. Stages are not tree tiers or weeks. Outline outcomes are not instructions for a finished practice.
+${outline.map((range, index) => `${index + 1}. ${range.start} to ${range.end}`).join("\n")}
 ${p.targetDate !== "not provided" ? "Return only TWO detailed nodes per branch, for weeks 1 and 2, each with its own full and two-minute easy practice. Later detail is proposed at weekly checkpoints, never invented in advance." : "For this legacy plan return four detailed nodes per branch, retaining its existing ladder."}
 Use stages appropriate to the goal, starting from the stated experience and available resources. If the person is already experienced or has a project, build from what they actually said; do not restart them at zero. For making goals, research the problem, build a small version, seek feedback if available, and improve it. For skills, choose a feasible baseline, targeted practice and a way to check progress. Treat access to people, facilities, equipment, existing customers and prior work as unknown unless confirmed. When unavailable or unclear, offer a solo or resource-light action instead. Each action is one session within the budget, not the whole week's work in one sitting.
 THE OTHER THREE BRANCHES ARE SUPPORT: ONE PRACTICE, DEEPENING
@@ -258,15 +261,13 @@ JSON — exactly this shape, nothing around it. Write "brief" first: the plan mu
 Hard limits: steps name actions only, never "consider", "think about", "reflect on" or "explore". No calorie counts, weight targets, fasting, sleep restriction, substances or medical advice. No shame, no "discipline", no "no excuses". Never describe yourself or the app. Output JSON only.`;
 }
 
-export function validateTree(raw: unknown, budget: number, length?: number, end?: string): string | null {
+export function validateTree(raw: unknown, budget: number, length?: number): string | null {
   if (!raw || typeof raw !== "object") return "not an object";
   const tree = raw as { primaryBranch?: unknown; summary?: unknown; safetyNote?: unknown; pillars?: unknown };
   if (!["body", "mind", "craft", "connection"].includes(String(tree.primaryBranch))) return "bad primary branch";
   if (typeof tree.summary !== "string" || tree.summary.length < 10 || tree.summary.length > 300) return "bad summary";
   if (typeof tree.safetyNote !== "string" || tree.safetyNote.length > 240) return "bad safety note";
-  if (length && end) {
-    const start = new Date(Date.parse(`${end}T12:00:00Z`) - length * 86400000).toISOString().slice(0, 10);
-    if (!validOutline((raw as { stages?: unknown }).stages, start, length)) return "invalid stage outline";
+  if (length) {
     if (!validRealityCheck((raw as { realityCheck?: unknown }).realityCheck)) return "invalid reality check";
   }
   if (!Array.isArray(tree.pillars) || tree.pillars.length !== 4) return "wrong pillar count";
@@ -615,7 +616,14 @@ Deno.serve(async (req: Request) => {
     }
     if (tree) {
       sawDraft = true;
-      const problem = outputSafe(tree) ? validateTree(tree, budget, body.targetDate ? daysRemaining : undefined, body.targetDate ? legEnd : undefined) : "unsafe category advice";
+      // The model writes the stage text; the calendar is ours. Normalising here
+      // means a date off by a day, or one stage too many, cannot cost the person
+      // their plan and hand them the starter library instead.
+      if (body.targetDate) {
+        const outlineStart = new Date(Date.parse(`${legEnd}T12:00:00Z`) - daysRemaining * 86400000).toISOString().slice(0, 10);
+        (tree as { stages?: unknown }).stages = normaliseStages((tree as { stages?: unknown }).stages, outlineStart, daysRemaining);
+      }
+      const problem = outputSafe(tree) ? validateTree(tree, budget, body.targetDate ? daysRemaining : undefined) : "unsafe category advice";
       // One line per attempt. This is how "did the model actually run?" gets
       // answered from the function logs, without logging the person's goal.
       console.log(

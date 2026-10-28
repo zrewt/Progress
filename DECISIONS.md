@@ -1,5 +1,13 @@
 # Implementation decisions
 
+## Target-date change: who owns the stage dates
+
+- A live attempt returned a good draft and was rejected with `invalid stage outline`, then the starter library was used. The validator demanded the model reproduce exact contiguous dates, which is arithmetic the app already knows how to do. The model now writes only stage titles and outcomes; `normaliseStages` places them on the canonical ranges for the leg. A wrong date, an inclusive end or one stage too many or too few no longer costs the person their AI plan.
+- The prompt now lists the exact date ranges instead of asking the model to divide the days, so the common failure is avoided before the fallback does anything.
+- Invalid or missing text for one stage becomes a neutral label for that range only; the other stages and every practice survive. Stage text still goes through `validatePracticeText`.
+- A test pins the server's ranges to the app's `stageRanges` for every boundary length (14, 15, 28, 29, 56, 57, 112), so the outline and the pace line cannot disagree about the current stage. The strict `validOutline` helper was removed rather than left unused.
+- The deployed function must be redeployed for this to take effect; the local tests exercise the new code path but no live plan was generated here.
+
 ## Target-date change: Stage 4 safety
 
 - Existing accounts keep nullable age brackets and are asked on the next app session; no historical rows are rewritten. New auth.users inserts require an eligible self-declared bracket. This is tested in PGlite, not verified against live Supabase Auth; self-declared age cannot be verified. The bracket is immutable through the app RPC after first confirmation.
