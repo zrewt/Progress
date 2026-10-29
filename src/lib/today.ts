@@ -32,7 +32,7 @@ export interface TodayView {
 }
 
 function seasonFor(snapshot: DailySnapshot): Season | null {
-  return snapshot.seasons.find((season) => season.status === "active") ?? snapshot.seasons[0] ?? null;
+  return snapshot.seasons.find((season) => season.status === "active") ?? null;
 }
 
 /** Consecutive days before today with neither a counted practice nor a rest day. */

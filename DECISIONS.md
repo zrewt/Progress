@@ -1,5 +1,11 @@
 # Implementation decisions
 
+## Chapter continuation — Step B
+
+- Closing a chapter requires a separate confirmation and an owner-scoped, version-checked transaction. A restart uses a separate server function that refuses to replace a chapter started on another device.
+- A finished account sees history and settings without an active plan; starting another goal reuses onboarding. Existing reminder preferences remain on the device, but scheduled notifications are cancelled. Other devices cancel when they next refresh.
+- Historical trees are calculated read-only from the same distinct completed-day rule used by the database. Archived milestones are never modified; the displayed tree is a reconstruction from the loaded journal.
+
 ## Chapter continuation — Step A
 
 - A chapter is a linked new season; existing seasons and milestone constraints are unchanged. Reflection answers are transient and not stored with the plan. Separate, versioned consent is required before sending them to Gemini; withdrawing AI consent clears it.

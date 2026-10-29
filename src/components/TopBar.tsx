@@ -9,11 +9,11 @@ import { Display } from "./Type";
 import { SettingsSheet } from "./SettingsSheet";
 
 export function TopBar() {
-  const { profile, signOut } = useGame();
+  const { profile, signOut, user } = useGame();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  if (!profile) return null;
+  if (!profile && !user) return null;
 
-  const stats = levelStats(profile.xp);
+  const stats = levelStats(profile?.xp ?? 0);
   const xpInto = `${stats.into}/${stats.needed}`;
 
   return (
@@ -28,9 +28,9 @@ export function TopBar() {
           <View style={styles.stats}>
             <Text style={styles.statValue}>Lv {stats.level}</Text>
             <Text style={styles.statDivider}>·</Text>
-            <Text style={styles.statValue}>{profile.streak}d</Text>
+            <Text style={styles.statValue}>{profile?.streak ?? 0}d</Text>
             <Text style={styles.statDivider}>·</Text>
-            <Text style={styles.statValue}>{profile.xp} XP</Text>
+            <Text style={styles.statValue}>{profile?.xp ?? 0} XP</Text>
           </View>
 
           <Pressable

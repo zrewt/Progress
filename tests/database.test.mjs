@@ -77,6 +77,28 @@ test('daily database: migrations, backfill, atomic retries, undo, boundaries, ar
  });
 });
 
+test('finish and restart preserve growth and reject stale or foreign devices', async(t)=>{
+ const db=await setup(); t.after(()=>db.close()); await asUser(db);
+ const old=await rpc(db,'start_next_season',[plan,'UTC','Writer','completed']);
+ const pid=(await db.query('select id from public.practices where season_id=$1 order by sort_order limit 1',[old])).rows[0].id;
+ await rpc(db,'complete_practice',[old,pid,'easy',crypto.randomUUID(),new Date().toISOString()]);
+ const before=await rpc(db,'get_progress',[old]);
+ const oldEvents=(await db.query('select * from public.completion_events where season_id=$1',[old])).rows;
+ const oldMilestones=(await db.query('select * from public.milestones where season_id=$1',[old])).rows;
+ await assert.rejects(()=>rpc(db,'finish_chapter',[old,2]));
+ await asUser(db,B); await assert.rejects(()=>rpc(db,'finish_chapter',[old,1])); await asUser(db);
+ await rpc(db,'finish_chapter',[old,1]);
+ assert.equal((await db.query("select count(*)::int n from public.seasons where status='active'")).rows[0].n,0);
+ await assert.rejects(()=>rpc(db,'finish_chapter',[old,1]));
+ const next=await rpc(db,'start_after_finished_chapter',[plan,'UTC','Writer']);
+ assert.notEqual(old,next);
+ await assert.rejects(()=>rpc(db,'start_after_finished_chapter',[plan,'UTC','Writer']));
+ assert.equal((await db.query('select status from public.seasons where id=$1',[next])).rows[0].status,'active');
+ assert.deepEqual(await rpc(db,'get_progress',[old]),before);
+ assert.deepEqual((await db.query('select * from public.completion_events where season_id=$1',[old])).rows,oldEvents);
+ assert.deepEqual((await db.query('select * from public.milestones where season_id=$1',[old])).rows,oldMilestones);
+});
+
 test('chapter approval is atomic, owner-scoped, stale-safe, and preserves old growth', async(t)=>{
  const db=await setup(); t.after(()=>db.close()); await asUser(db);
  const old=await rpc(db,'start_next_season',[plan,'UTC','Writer','completed']);

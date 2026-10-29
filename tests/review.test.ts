@@ -123,8 +123,21 @@ test("a weekly support is due only once per week", () => {
   assert.equal(isSupportingDue(support, [event("2026-10-11", "full", "p2")], "2026-10-24"), true);
 });
 
-test("an empty journal has no Today rather than an invented one", () => {
+test("an empty or finished journal has no active Today, review, or editable tree", () => {
   assert.equal(todayState({ ...snapshot(), seasons: [], practices: [] }), null);
+  const finished = snapshot({ seasons: [{ ...season, status: "completed" }], progress: null });
+  assert.equal(todayState(finished), null);
+  assert.deepEqual(presentation(finished), { profile: null, nodes: [] });
+});
+
+test("a past chapter tree shows distinct-day milestone growth without changing history", () => {
+  const milestones = [1, 2, 3, 4].map(tier => ({ id: `m${tier}`, season_id: season.id, user_id: season.user_id, branch: "craft" as const, tier, title: `Tier ${tier}`, practice_id: "p1", required_days: tier, unlocked_at: null }));
+  const finished = snapshot({ seasons: [{ ...season, status: "completed" }], progress: null, milestones, events: [event("2026-10-10"), event("2026-10-10", "easy"), event("2026-10-11"), { ...event("2026-10-12"), undone_at: "2026-10-12" }] });
+  const before = JSON.stringify(finished);
+  const tree = presentation(finished, season.id).nodes;
+  assert.deepEqual(tree.map(node => node.status), ["completed", "completed", "active", "active"]);
+  assert.equal(JSON.stringify(finished), before);
+  assert.deepEqual(presentation(snapshot(), season.id).nodes, [], "an active chapter cannot be opened as history");
 });
 
 // The tree draws sixteen nodes from four practices: each practice backs one

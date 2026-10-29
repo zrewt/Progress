@@ -185,16 +185,18 @@ export function dailyPlanFromTree(
   return candidate;
 }
 
-export function presentation(snapshot: DailySnapshot): { profile: Profile | null; nodes: TreeNode[] } {
-  const season = snapshot.seasons.find((s) => s.status === "active") ?? snapshot.seasons[0];
+export function presentation(snapshot: DailySnapshot, seasonId?: string): { profile: Profile | null; nodes: TreeNode[] } {
+  const season = seasonId ? snapshot.seasons.find((s) => s.id === seasonId && s.status !== "active") : snapshot.seasons.find((s) => s.status === "active");
   const progress = snapshot.progress;
-  if (!season || !progress) return { profile: null, nodes: [] };
+  if (!season || (!progress && !seasonId)) return { profile: null, nodes: [] };
   const practices = snapshot.practices.filter((p) => p.season_id === season.id && p.active);
   const nodes: TreeNode[] = snapshot.milestones
     .filter((m) => m.season_id === season.id && practices.some((p) => p.id === m.practice_id))
     .map((m) => {
       const practice = practices.find((p) => p.id === m.practice_id);
-      const unlocked = progress.unlocked_milestones.includes(m.id);
+      const unlocked = seasonId
+        ? new Set(snapshot.events.filter((e) => e.season_id === season.id && e.practice_id === m.practice_id && !e.undone_at && (e.kind === "full" || e.kind === "easy")).map((e) => e.local_date)).size >= m.required_days
+        : Boolean(progress?.unlocked_milestones.includes(m.id));
       const branchLabel = (season.branch_labels as Record<PillarId, string> | null)?.[m.branch];
       // Each tier shows that week's real step, so the tree grows deeper rather
       // than repeating the same opening node four times.
@@ -219,9 +221,9 @@ export function presentation(snapshot: DailySnapshot): { profile: Profile | null
       goal: season.goal,
       blocker: season.blocker,
       timeBudget: String(season.minutes_budget),
-      xp: progress.xp,
-      level: progress.level,
-      streak: progress.current_streak,
+      xp: progress?.xp ?? 0,
+      level: progress?.level ?? 1,
+      streak: progress?.current_streak ?? 0,
       lastCompletedDate: null,
       seasonStartedAt: `${season.started_on}T12:00:00Z`,
     },

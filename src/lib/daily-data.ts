@@ -30,7 +30,7 @@ export class DailyData {
     ]);
     if ([profile, seasons, practices, milestones, events, reviews, practiceWeeks].some((r) => r.error)) throw new Error("We couldn’t load your journal. Nothing has been overwritten. Please try again.");
     const list = seasons.data as Season[];
-    const season = list.find((s) => s.status === "active") ?? list[0];
+    const season = list.find((s) => s.status === "active");
     return {
       profile: profile.data,
       practiceWeeks: practiceWeeks.data ?? [],
@@ -44,6 +44,9 @@ export class DailyData {
   }
   start(plan: DailyPlan, timezone: string, name?: string) {
     return this.rpc<string>("start_next_season", { p_plan: plan, p_timezone: timezone, p_display_name: name ?? null, p_previous_status: "completed" });
+  }
+  startAfterFinish(plan: DailyPlan, timezone: string, name?: string) {
+    return this.rpc<string>("start_after_finished_chapter", { p_plan: plan, p_timezone: timezone, p_display_name: name ?? null });
   }
   record(input: EventInput) {
     if (input.something_hurt) return this.rpc<{ event: CompletionEvent; progress: Progress; credited: boolean }>("record_pain", { p_season_id: input.season_id, p_practice_id: input.practice_id, p_client_event_id: input.client_event_id, p_occurred_at: input.occurred_at });
@@ -62,7 +65,7 @@ export class DailyData {
   }
   acceptWeek(seasonId: string, draft: WeeklyDraft) { return this.rpc<number>("accept_practice_week", { p_season_id: seasonId, p_draft: draft }); }
   setLighterWeek(seasonId: string) { return this.rpc<null>("set_lighter_week", { p_season_id: seasonId }); }
-  endSeason(seasonId: string, status: "completed" | "archived") { return this.rpc<null>("end_season", { p_season_id: seasonId, p_status: status }); }
+  finishChapter(seasonId: string, expectedVersion: number) { return this.rpc<null>("finish_chapter", { p_season_id: seasonId, p_expected_version: expectedVersion }); }
   history() { return this.rpc<SeasonHistoryEntry[]>("season_history", {}); }
   setAgeBracket(bracket: "13_17" | "18_plus") { return this.rpc<null>("set_age_bracket", { p_bracket: bracket }); }
   approveChapter(previousId: string, expectedVersion: number, plan: DailyPlan, timezone: string, startedOn: string) { return this.rpc<string>("approve_next_chapter", { p_previous_id: previousId, p_expected_version: expectedVersion, p_plan: plan, p_timezone: timezone, p_started_on: startedOn }); }

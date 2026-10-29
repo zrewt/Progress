@@ -20,7 +20,7 @@ import { Body, Display, Label } from "./Type";
 
 type Path = "continue" | "change" | "finish" | null;
 export function ChapterReview({ onClose }: { onClose: () => void }) {
-  const { today, snapshot, aiAllowed, recordConsent, recordChapterConsent, approveChapter, authBusy } = useGame();
+  const { today, snapshot, aiAllowed, recordConsent, recordChapterConsent, approveChapter, finishChapter, authBusy } = useGame();
   const insets = useSafeAreaInsets();
   const [answers, setAnswers] = useState(["", "", "", ""]);
   const [path, setPath] = useState<Path>(null);
@@ -64,6 +64,14 @@ export function ChapterReview({ onClose }: { onClose: () => void }) {
     finally { setBusy(false); }
   }
 
+  async function finish() {
+    setBusy(true);
+    try {
+      if (await finishChapter(season.id, season.plan_version)) onClose();
+      else setMessage("The chapter could not be closed. Refresh and try again.");
+    } finally { setBusy(false); }
+  }
+
   async function approve() {
     if (!draft || draftVersion === null || !draftSeason || !draftDate) return;
     if (date !== draftDate) { setDraft(null); setMessage("The date changed. Please generate a fresh draft."); return; }
@@ -86,7 +94,7 @@ export function ChapterReview({ onClose }: { onClose: () => void }) {
         <QuietButton label={path === "continue" ? "Selected: Continue this goal" : "Continue this goal"} onPress={() => { setGoal(season.goal); setPath("continue"); setDraft(null); }} />
         <QuietButton label={path === "change" ? "Selected: Change the goal" : "Change the goal"} onPress={() => { setPath("change"); setDraft(null); }} />
         <QuietButton label="Finish for now" onPress={() => { setPath("finish"); setDraft(null); }} />
-        {path === "finish" ? <Body>Finishing without a new plan is not available yet. You can close this review and keep your current chapter.</Body> : null}
+        {path === "finish" ? <><Body>Your chapter will close without a new plan. Your tree and history remain available, and you can start a new goal later.</Body><PrimaryButton label="Close this chapter" onPress={() => void finish()} disabled={busy || authBusy} loading={busy} /><QuietButton label="Keep this chapter" onPress={() => setPath(null)} disabled={busy} /></> : null}
         {path === "continue" || path === "change" ? <>
           <Label>Your goal</Label>
           {path === "change" ? <TextInput accessibilityLabel="Your goal" value={goal} onChangeText={value => { setGoal(value); setScreening(null); setScreeningAccepted(false); setDraft(null); }} maxLength={140} style={styles.input} /> : <Body>{goal}</Body>}

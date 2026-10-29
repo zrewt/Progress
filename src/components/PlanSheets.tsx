@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowRight, X } from "lucide-react-native";
 import { useGame, planVersionOf } from "../lib/game-context";
-import { dailyPlanFromTree, planFromSeason } from "../lib/daily-adapter";
+import { dailyPlanFromTree, planFromSeason, presentation } from "../lib/daily-adapter";
 import { generateTree } from "../lib/gemini";
 import { planningLeg } from "../lib/engine/schedule";
 import { addDays, daysBetween, localDate } from "../lib/progression";
@@ -17,6 +17,7 @@ import type { OnboardingAnswers } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { PrimaryButton, QuietButton } from "./Controls";
 import { Body, Display, Label, Micro } from "./Type";
+import { SkillTree } from "./SkillTree";
 
 function BudgetChips({ value, onChange }: { value: Budget; onChange: (budget: Budget) => void }) {
   return (
@@ -275,8 +276,9 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
 }
 
 export function SeasonHistory() {
-  const { history, loadHistory } = useGame();
+  const { history, loadHistory, snapshot } = useGame();
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
   if (!open) {
     return (
       <Pressable
@@ -289,6 +291,9 @@ export function SeasonHistory() {
       </Pressable>
     );
   }
+  const selectedEntry = history?.find((entry) => entry.id === selected);
+  const selectedSeason = snapshot?.seasons.find((season) => season.id === selected && season.status !== "active");
+  const tree = snapshot && selectedSeason ? presentation(snapshot, selectedSeason.id).nodes : [];
   return (
     <View style={styles.history}>
       <View style={styles.historyHead}>
@@ -300,13 +305,20 @@ export function SeasonHistory() {
       {history === null ? <Micro>Loading your history…</Micro> : null}
       {history?.length === 0 ? <Body style={{ fontSize: 12 }}>Your first season is still being written.</Body> : null}
       {history?.map((entry) => (
-        <View key={entry.id} style={styles.historyRow}>
+        <Pressable key={entry.id} style={styles.historyRow} accessibilityRole="button" accessibilityState={{ selected: selected === entry.id }} onPress={() => setSelected(selected === entry.id ? null : entry.id)}>
           <Text style={styles.historyGoal}>{entry.goal}</Text>
           <Text style={styles.historyMeta}>
             {entry.days_practiced} days · {entry.xp} XP · {entry.started_on} to {entry.ends_on}
           </Text>
-        </View>
+          <Text style={styles.historyMeta}>{selected === entry.id ? "Hide tree" : "View tree"}</Text>
+        </Pressable>
       ))}
+      {selectedEntry && selectedSeason ? <View style={{ gap: 8 }}>
+        <Label>{selectedEntry.goal}</Label>
+        <Body>Chapter: {selectedEntry.started_on} to {selectedEntry.ends_on}{selectedSeason.target_date ? ` · Target: ${selectedSeason.target_date}` : ""}</Body>
+        <Body>{tree.filter(node => node.status === "completed").length} of {tree.length} milestones grown · Read-only</Body>
+        <SkillTree key={selectedSeason.id} nodes={tree} readOnly onSelect={() => undefined} />
+      </View> : null}
     </View>
   );
 }

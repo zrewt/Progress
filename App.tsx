@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -30,6 +30,8 @@ import { Onboarding } from "./src/components/Onboarding";
 import { SetupRequired } from "./src/components/SetupRequired";
 import { ResetPasswordScreen } from "./src/components/ResetPasswordScreen";
 import { ReminderChoice } from "./src/components/ReminderChoice";
+import { SeasonHistory } from "./src/components/PlanSheets";
+import { TopBar } from "./src/components/TopBar";
 import { missingLinkConfig } from "./src/lib/config";
 import { colors } from "./src/theme";
 import { Body } from "./src/components/Type";
@@ -47,7 +49,10 @@ if (__DEV__) {
 }
 
 function Root() {
-  const { loading, user, profile, snapshot, cloudEnabled, loadFailed, error, retryLoad, signOut, recovering, reminderSetupPending, setReminderSetupPending } = useGame();
+  const { loading, user, profile, snapshot, cloudEnabled, loadFailed, error, clearError, retryLoad, signOut, recovering, reminderSetupPending, setReminderSetupPending } = useGame();
+  const [startingGoal, setStartingGoal] = useState(false);
+  const hasFinishedChapter = Boolean(snapshot?.seasons.length && !snapshot.seasons.some(season => season.status === "active"));
+  useEffect(() => { if (!hasFinishedChapter) setStartingGoal(false); }, [hasFinishedChapter]);
 
   return (
     <>
@@ -69,6 +74,16 @@ function Root() {
         <AuthScreen />
       ) : !snapshot?.profile?.age_bracket ? (
         <AgeChoice />
+      ) : hasFinishedChapter ? (
+        startingGoal ? <Onboarding onCancel={() => setStartingGoal(false)} /> : <View style={{ flex: 1 }}>
+          <TopBar />
+          <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
+            <Body>Your chapter is closed. Your progress is saved, and there is no active plan.</Body>
+            {error ? <><Body accessibilityRole="alert">{error}</Body><QuietButton label="Dismiss" onPress={clearError} /></> : null}
+            <PrimaryButton label="Start a new goal" onPress={() => setStartingGoal(true)} />
+            <SeasonHistory />
+          </ScrollView>
+        </View>
       ) : !profile ? (
         <Onboarding />
       ) : reminderSetupPending ? (

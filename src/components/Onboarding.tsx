@@ -330,7 +330,7 @@ const FALLBACK_COPY: Record<FallbackReason, string> = {
   unavailable: "The AI could not be reached, so the starter library wrote this.",
 };
 
-export function Onboarding() {
+export function Onboarding({ onCancel }: { onCancel?: () => void } = {}) {
   const { user, submitOnboarding, authBusy, signOut, error, aiAllowed, recordConsent, snapshot } = useGame();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
@@ -495,8 +495,8 @@ export function Onboarding() {
           <BrandMark size={24} />
           <Display style={styles.brandName}>Vitality Tree</Display>
         </View>
-        <Pressable onPress={() => void signOut()} hitSlop={8}>
-          <Text style={styles.signOut}>Sign out</Text>
+        <Pressable onPress={onCancel ?? (() => void signOut())} hitSlop={8} accessibilityRole="button">
+          <Text style={styles.signOut}>{onCancel ? "Back" : "Sign out"}</Text>
         </Pressable>
       </View>
 

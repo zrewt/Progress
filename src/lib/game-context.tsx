@@ -46,6 +46,7 @@ interface GameContextValue {
   acceptWeek: (draft: WeeklyDraft) => Promise<boolean>;
   submitReview: (weekStart: string, difficulty: number, note: string | null, apply: boolean) => Promise<string | null>;
   finishSeason: (plan: DailyPlan) => Promise<boolean>;
+  finishChapter: (id: string, version: number) => Promise<boolean>;
   approveChapter: (previousId: string, version: number, plan: DailyPlan, startedOn: string) => Promise<boolean>;
   recordChapterConsent: () => Promise<boolean>;
   loadHistory: () => Promise<void>;
@@ -84,7 +85,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const data = useMemo(() => sb ? new DailyData(sb) : null, [sb]);
   const { profile, nodes } = useMemo(() => snapshot ? presentation(snapshot) : { profile: null, nodes: [] }, [snapshot]);
   const today = useMemo(() => snapshot ? todayState(snapshot) : null, [snapshot]);
-  const activeSeason = snapshot?.seasons.find((s) => s.status === "active") ?? snapshot?.seasons[0];
+  const activeSeason = snapshot?.seasons.find((s) => s.status === "active");
 
   const dismissUndo = useCallback(() => {
     if (undoTimeout.current) clearTimeout(undoTimeout.current);
@@ -238,7 +239,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!data || !currentUser.current || loadFailed || loading) return false;
     const token = scope.token(); setAuthBusy(true);
     try {
-      await data.start(plan, snapshot?.profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC", currentUser.current.name);
+      const timezone = snapshot?.profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+      if (snapshot?.seasons.length && !activeSeason) await data.startAfterFinish(plan, timezone, currentUser.current.name);
+      else await data.start(plan, timezone, currentUser.current.name);
       if (!scope.isCurrent(token)) return false;
       setHistory(null);
       await retryLoad();
@@ -343,6 +346,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const saved = await startSeason(plan);
     if (saved) setHistory(null);
     return saved;
+  }
+  async function finishChapter(id: string, version: number) {
+    if (!data || !currentUser.current || loadFailed || loading || activeSeason?.id !== id) return false;
+    const token = scope.token(); setAuthBusy(true);
+    try {
+      await data.finishChapter(id, version);
+      if (!scope.isCurrent(token)) return false;
+      setHistory(null); dismissUndo();
+      let reminderFailed = false;
+      await cancelReminders().catch(() => { reminderFailed = true; });
+      await retryLoad();
+      if (reminderFailed && scope.isCurrent(token)) setError("The chapter is closed, but reminders could not be cleared on this device. Check notification settings.");
+      return true;
+    } catch {
+      if (scope.isCurrent(token)) { await retryLoad(); setError("The chapter could not be closed. Refresh and try again."); }
+      return false;
+    } finally { if (scope.isCurrent(token)) setAuthBusy(false); }
   }
   async function approveChapter(previousId: string, version: number, plan: DailyPlan, startedOn: string) {
     if (!data || !currentUser.current || loadFailed || loading) return false;
@@ -455,7 +475,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     aiAllowed: Boolean(snapshot?.profile?.ai_consent_at) && snapshot?.profile?.ai_consent_version === AI_CONSENT_VERSION,
     recovering, reminderSetupPending, setReminderSetupPending, configureReminder, queueCount, syncState, syncNow, setLighterWeek,
     signIn, signUp, setAgeBracket, signOut, retryLoad, submitOnboarding, startSeason, recordEvent, undoEvent, dismissUndo,
-    editPlan, replacePractice, acceptWeek, submitReview, finishSeason, approveChapter, recordChapterConsent, loadHistory, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext,
+    editPlan, replacePractice, acceptWeek, submitReview, finishSeason, finishChapter, approveChapter, recordChapterConsent, loadHistory, recordConsent, withdrawConsent, setTimezone, setPersonalizationContext,
     requestPasswordReset, resendConfirmation, updatePassword, cancelRecovery, deleteAccount, completeNode, dismissCelebration, clearError,
   };
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

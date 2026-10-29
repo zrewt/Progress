@@ -52,9 +52,11 @@ function NodeGlyph({ status, size = 18 }: { status: NodeStatus; size?: number })
 export function SkillTree({
   nodes,
   onSelect,
+  readOnly = false,
 }: {
   nodes: TreeNode[];
   onSelect: (node: TreeNode) => void;
+  readOnly?: boolean;
 }) {
   const { width } = useWindowDimensions();
   const wide = width >= 760;
@@ -84,8 +86,7 @@ export function SkillTree({
           <Label>The progression</Label>
           <Display style={styles.sectionTitle}>The four branches</Display>
           <Body style={styles.sectionCopy}>
-            Each branch holds four practices. Every tier is open — complete one
-            and it stays grown.
+            {readOnly ? "This chapter’s milestones are shown as they were earned." : "Each branch holds four milestones. Your completed milestones stay grown."}
           </Body>
         </View>
         <View style={styles.countBlock}>
@@ -282,7 +283,7 @@ export function SkillTree({
                   <Pressable
                     // Four tiers share one practice id, so the tier is what makes a node unique.
                     key={`${node.id}-${node.tier}`}
-                    disabled={locked}
+                    disabled={locked || readOnly}
                     onPress={() => onSelect(node)}
                     accessibilityRole="button"
                     accessibilityLabel={`${pillar.name}, tier ${
@@ -431,7 +432,7 @@ export function SkillTree({
               return (
                 <Pressable
                   key={`${node.id}-${node.tier}`}
-                  disabled={locked}
+                  disabled={locked || readOnly}
                   onPress={() => onSelect(node)}
                   accessibilityRole="button"
                   accessibilityLabel={`Tier ${node.tier + 1}: ${node.title} (${STATUS_LABEL[node.status]})`}
