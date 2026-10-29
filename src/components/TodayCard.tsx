@@ -62,7 +62,7 @@ export function TodayCard({
         <View style={styles.eyebrowRow}>
           <PillarIcon pillar={primary.branch} size={16} color={colors.copper} />
           <Label style={{ color: colors.copper }}>
-            {countedToday ? "Today · Complete" : `Your next step · ${pillar.name}`}
+            {countedToday ? "Today · Complete" : `Your next step · ${season.branch_outlines?.[primary.branch]?.name ?? pillar.name}`}
           </Label>
         </View>
         <Micro>Day {today.dayNumber}</Micro>
@@ -173,7 +173,7 @@ export function TodayCard({
                 <PillarIcon pillar={practice.branch} size={14} color={colors.sage} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.supportTitle}>{practice.title}</Text>
-                  <Text style={styles.supportMeta}>{accent.name} · {practice.full_variant.minutes} min · optional</Text>
+                  <Text style={styles.supportMeta}>{season.branch_outlines?.[practice.branch]?.name ?? accent.name} · {practice.full_variant.minutes} min · optional</Text>
                 </View>
                 <ArrowRight size={13} strokeWidth={1.6} color={colors.sageDim} />
               </Pressable>

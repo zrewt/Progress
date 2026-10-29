@@ -681,6 +681,7 @@ export function Onboarding({ onCancel }: { onCancel?: () => void } = {}) {
 
               {previewPlan.reality_check ? <View style={{ gap: 8 }}><Label>Reality check: {previewPlan.reality_check.level}</Label><Body>{previewPlan.reality_check.explanation}</Body><QuietButton label="Adjust goal or date" onPress={() => { setPreview(null); setStep(1); }} /></View> : null}
               {previewPlan.stages?.map((stage, index) => <Body key={index}>{stage.title} · {stage.start} to {stage.end} (end exclusive){"\n"}{stage.outcome}</Body>)}
+              {previewPlan.branch_outlines ? <View style={{ gap: 12, marginTop: 16 }}><Label>Your branch milestones</Label><Body>These are directions, not tasks. Milestones grow through completed practice days.</Body>{Object.values(previewPlan.branch_outlines).map(branch => <View key={branch.name} style={{ gap: 4 }}><Label>{branch.name}</Label>{branch.milestones.map(milestone => <Body key={milestone.title}>{milestone.title}: {milestone.description}</Body>)}</View>)}</View> : null}
               <Label style={{ marginTop: 18, marginBottom: 8 }}>
                 Your first two weeks
               </Label>
@@ -693,7 +694,7 @@ export function Onboarding({ onCancel }: { onCancel?: () => void } = {}) {
                       <View style={styles.seedTitleRow}>
                         <PillarIcon pillar={practice.branch} size={14} color={colors.copper} />
                         <Text style={styles.seedBranchName}>
-                          {meta.name} · {practice.role === "primary" ? "every day" : "once this week"}
+                          {previewPlan.branch_outlines?.[practice.branch]?.name ?? meta.name} · {practice.role === "primary" ? "every day" : "once this week"}
                         </Text>
                       </View>
                       <Text style={styles.seedDuration}>{practice.full_variant.minutes} min</Text>

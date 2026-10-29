@@ -6,13 +6,14 @@
 
 import {
   assessGoal,
-  classifyGoal, safeForCategory, safetyInstructions,
+  classifyGoal, safeForCategory, safetyInstructions, requiresPreparation,
   genericFiller,
   repeatedStep,
   validatePracticeText,
   validateStepsWithinBudget,
 } from "./safety-rules.ts";
 import { validateQuestions } from "./questions.ts";
+import { preparationOutlines, validOutlines } from "./outlines.ts";
 import { dropInvalidEasyVersions, durationCap, normaliseFocusLabels, normaliseStages, stageRanges, validRealityCheck, validateWeeklyDraft } from "./plan-validation.ts";
 
 const CORS_HEADERS = {
@@ -217,12 +218,8 @@ Return ${outline.length} outline stages on exactly these dates. Each end is excl
 ${outline.map((range, index) => `${index + 1}. ${range.start} to ${range.end}`).join("\n")}
 ${p.targetDate !== "not provided" ? "Return only TWO detailed nodes per branch, for weeks 1 and 2, each with its own full and two-minute easy practice. Later detail is proposed at weekly checkpoints, never invented in advance." : "For this legacy plan return four detailed nodes per branch, retaining its existing ladder."}
 Use stages appropriate to the goal, starting from the stated experience and available resources. If the person is already experienced or has a project, build from what they actually said; do not restart them at zero. For making goals, research the problem, build a small version, seek feedback if available, and improve it. For skills, choose a feasible baseline, targeted practice and a way to check progress. Treat access to people, facilities, equipment, existing customers and prior work as unknown unless confirmed. When unavailable or unclear, offer a solo or resource-light action instead. Each action is one session within the budget, not the whole week's work in one sitting.
-THE OTHER THREE BRANCHES ARE SUPPORT: ONE PRACTICE, DEEPENING
-Each is one honest practice that makes the spine possible — the same act one step further each week, never a different activity. Each of the two detailed nodes still fits inside ${p.timeBudget} minutes and is comfortable on a bad day.
-- body: the physical side of this exact work — the walk that untangles the problem, forearm and shoulder work before a long session at the desk, the easy shake-out after a hard effort. Never a generic stretch.
-- mind: attention and knowledge for this goal — a relevant learning resource or a check on actual work.
-- connection: support for the goal without assuming other people are available; if no partner or audience is confirmed, prepare a question or identify a possible resource instead.
-If a branch has no obvious link, find the honest one and still name their real materials. No step may be interchangeable with a step on another branch.
+BRANCH OUTLINES: Choose four distinct, meaningful aspects of this person's goal. The keys body, mind, craft and connection are invisible storage slots, not categories: give each a short unique goal-specific name and four distinct directional milestones. Each milestone has a short title and one plain sentence describing a checkpoint, not a workout. Do not use medical claims, diagnostic language, sensitive health details, shame, discipline or no excuses. For high-risk goals every milestone must be nontechnical preparation only.\nTHE OTHER THREE BRANCHES SUPPORT THE GOAL
+Each storage slot's practices must serve its chosen branch name, not a predetermined body, mind, craft or connection category. Develop one distinct aspect of the actual goal in each branch. Do not assume access to people, facilities or equipment. Each detailed practice fits within ${p.timeBudget} minutes. No step may be interchangeable with a step on another branch.
 
 HOW A STEP IS WRITTEN — the difference from a generic plan is information, not tone
 A step is one physical or on-screen action this person could take tomorrow with what they already have, in words they would use, at most 18 words.
@@ -249,6 +246,7 @@ The summary is shown as the promise of the plan, above the practices. It must sa
 
 JSON — exactly this shape, nothing around it. Write "brief" first: the plan must follow it.
 {"primaryBranch":"body, mind, craft or connection, whichever best advances this goal",
+ "branchOutlines":{"body":{"name":"goal-specific branch name","milestones":[{"title":"short checkpoint","description":"one plain sentence"}, {"title":"different checkpoint","description":"one plain sentence"}, {"title":"different checkpoint","description":"one plain sentence"}, {"title":"different checkpoint","description":"one plain sentence"}]}, "mind":{"name":"different branch name","milestones":[{"title":"first checkpoint","description":"one plain sentence"},{"title":"second checkpoint","description":"one plain sentence"},{"title":"third checkpoint","description":"one plain sentence"},{"title":"fourth checkpoint","description":"one plain sentence"}]}, "craft":{"name":"different branch name","milestones":[{"title":"first checkpoint","description":"one plain sentence"},{"title":"second checkpoint","description":"one plain sentence"},{"title":"third checkpoint","description":"one plain sentence"},{"title":"fourth checkpoint","description":"one plain sentence"}]}, "connection":{"name":"different branch name","milestones":[{"title":"first checkpoint","description":"one plain sentence"},{"title":"second checkpoint","description":"one plain sentence"},{"title":"third checkpoint","description":"one plain sentence"},{"title":"fourth checkpoint","description":"one plain sentence"}]}},
  "brief":{"outcome":"max 140 characters","method":"max 160","week_one":"max 160","trap":"max 140","research":["one to three entries, max 120 each, or empty"]},
  "summary":"what will exist at this ${p.daysRemaining}-day checkpoint that does not exist now, plus the smallest daily act that gets them there; max 300 characters; plain language; no vague encouragement",
  "stages":[{"start":"YYYY-MM-DD","end":"YYYY-MM-DD exclusive","title":"max 80 characters","outcome":"max 200 characters"}],
@@ -304,7 +302,7 @@ export function validateTree(raw: unknown, budget: number, length?: number): str
   }
   // A step copied across branches was not written for either of them.
   const repeated = repeatedStep(branchSteps);
-  if (repeated) return `repeated step: ${repeated.step}`;
+  if (repeated) return "repeated step: duplicated across branches";
   return null;
 }
 
@@ -638,20 +636,25 @@ Deno.serve(async (req: Request) => {
       dropInvalidEasyVersions(tree);
       // A display-only branch label is trimmed, never a reason to reject the plan.
       normaliseFocusLabels(tree);
-      const problem = outputSafe(tree) ? validateTree(tree, budget, body.targetDate ? daysRemaining : undefined) : "unsafe category advice";
+      const problem = !validOutlines((tree as { branchOutlines?: unknown }).branchOutlines, category) ? "invalid branch outlines" : outputSafe(tree) ? validateTree(tree, budget, body.targetDate ? daysRemaining : undefined) : "unsafe category advice";
       // One line per attempt. This is how "did the model actually run?" gets
       // answered from the function logs, without logging the person's goal.
       console.log(
         "generate-tree",
         JSON.stringify({ attempt, model, ms: Date.now() - startedAt, verdict: problem ?? "ok" }),
       );
-      if (!problem) return respond(tree, 200);
+      if (!problem) {
+        if (requiresPreparation(category, conservative)) (tree as { branchOutlines: unknown }).branchOutlines = preparationOutlines();
+        return respond(tree, 200);
+      }
       lastProblem = problem;
       console.error("Rejected model output", { problem });
-      if (problem.startsWith(FILLER_PREFIX)) {
+      if (problem === "invalid branch outlines") {
+        correction = "Return four distinct branch names and four distinct, safe milestone titles and descriptions per branch, in the exact requested shape. Do not include sensitive or medical terms.";
+      } else if (problem.startsWith(FILLER_PREFIX)) {
         correction = `The previous draft used placeholder wording ("${problem.slice(FILLER_PREFIX.length)}"), which fits any goal and therefore helps nobody. Rewrite every practice and step so it names this person's actual screens, files, tools, subjects or people. Do not use that wording again.`;
       } else if (problem.startsWith(REPEAT_PREFIX)) {
-        correction = `The previous draft reused the same instruction on more than one branch ("${problem.slice(REPEAT_PREFIX.length)}"). Each branch must do a different job: the primary branch advances the goal through its outline and first two weeks, body serves the work, mind serves the knowledge, connection serves the people. Rewrite the duplicated branch.`;
+        correction = "The previous draft reused the same instruction on more than one branch. Each branch must do a different job for its chosen goal-specific focus. Rewrite the duplicated branch.";
       }
     }
   }

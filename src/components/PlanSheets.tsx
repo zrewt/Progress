@@ -73,6 +73,7 @@ export function EditPlanSheet({ visible, onClose }: { visible: boolean; onClose:
   const [screening, setScreening] = useState<boolean | null>(null);
   const [acceptedScreening, setAcceptedScreening] = useState(false);
   if (!visible || !plan || !today) return null;
+  if (plan.branch_outlines) return <SheetFrame title="Edit your plan" onClose={onClose}><Body>To change your goal or plan, review this chapter and start a new one. Your current milestones and progress will stay in your history.</Body><QuietButton label="Close" onPress={onClose} /></SheetFrame>;
   const safety = assessGoalSafety(goal);
   const valid = goal.trim().length >= 3 && goal.trim().length <= 140 && safety.safe && (classifyGoal(goal) === "ordinary" || screening === false || (screening === true && acceptedScreening));
 
@@ -242,6 +243,7 @@ export function SeasonSummarySheet({ visible, onClose }: { visible: boolean; onC
           {nextPlan ? <View style={{ gap: 8, marginTop: 12 }}>
             <Label>{nextPlan.plan_source === "ai" ? "AI draft" : nextPlan.plan_source === "mixed" ? "AI and starter practices" : "Starter plan"}</Label>
             <Body>{nextPlan.plan_summary}</Body>
+            {nextPlan.branch_outlines ? <><Label>Branch milestones</Label><Body>These are directions, not tasks. Milestones grow through completed practice days.</Body>{Object.values(nextPlan.branch_outlines).map(branch => <View key={branch.name} style={{ gap: 4 }}><Label>{branch.name}</Label>{branch.milestones.map(milestone => <Body key={milestone.title}>{milestone.title}: {milestone.description}</Body>)}</View>)}</> : null}
             {nextPlan.practices.map((practice) => <Body key={practice.branch}>{practice.role === "primary" ? "Daily" : "Weekly"}: {practice.title} — {practice.why}{"\n"}{practice.full_variant.steps.join("\n")}</Body>)}
             <PrimaryButton label="Approve and begin" onPress={() => void approveNew()} loading={busy} disabled={busy || authBusy} />
             <QuietButton label="Try another draft" onPress={() => void beginNew()} disabled={busy || authBusy} />

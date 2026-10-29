@@ -4,6 +4,7 @@ import { dailyPlanFromTree } from "../src/lib/daily-adapter";
 import { validatePlan } from "../src/lib/plans";
 import { generateQuestions, normalizeTree, questionResponse } from "../src/lib/gemini";
 import { GENERAL_QUESTIONS, validateQuestions } from "../supabase/functions/generate-tree/questions";
+import { localOutlines, preparationOutlines } from "../supabase/functions/generate-tree/outlines";
 import type { GeneratedNode, GeneratedTree, OnboardingAnswers, PillarId } from "../src/lib/types";
 
 const answers: OnboardingAnswers = {
@@ -268,9 +269,17 @@ test("AI-off questions do not contact the backend", async () => {
   assert.deepEqual(await generateQuestions(answers, false), { questions: GENERAL_QUESTIONS, source: "general", reason: "off" });
 });
 
+test("high-risk local alternatives use preparation-only milestones", () => {
+  const climbing = { ...answers, goal: "climb the Matterhorn", conservativeMode: true };
+  const plan = dailyPlanFromTree(climbing, normalizeTree(null, climbing), "seed-engine");
+  assert.equal(plan.plan_source, "local");
+  assert.deepEqual(plan.branch_outlines, preparationOutlines());
+});
+
 test("the on-device plan is labelled local and is built the same way", () => {
   const plan = dailyPlanFromTree(answers, tree(), "seed-engine");
   assert.equal(plan.plan_source, "local");
+  assert.deepEqual(plan.branch_outlines, localOutlines());
   assert.equal(plan.practices.filter((practice) => practice.role === "primary").length, 1);
   assert.deepEqual(validatePlan(plan), []);
 });

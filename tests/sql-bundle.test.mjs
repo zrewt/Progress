@@ -85,6 +85,7 @@ test('the remaining file contains only the migrations an existing project lacks'
     '202610280002_budgets_and_questions.sql',
     '202610280003_chapter_continuation.sql',
     '202610280004_finish_chapter.sql',
+    '202610290001_chapter_branch_outlines.sql',
   ], 'the assumption this file is built on has changed; rebuild it');
   await assertCovers(REMAINING, outstanding);
 });

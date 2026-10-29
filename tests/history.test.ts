@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { planHistory } from "../src/lib/engine/history";
+import { presentation } from "../src/lib/daily-adapter";
+import { localOutlines } from "../supabase/functions/generate-tree/outlines";
 import type { CompletionEvent, DailySnapshot, Practice, Season, WeeklyReview } from "../src/lib/daily-types";
 
 const season = (overrides: Partial<Season> = {}): Season =>
@@ -90,6 +92,19 @@ const snapshot = (overrides: Partial<DailySnapshot> = {}): DailySnapshot => ({
   reviews: [],
   progress: null,
   ...overrides,
+});
+
+test("historical chapter outlines use their own stored titles and growth across replacement practices", () => {
+  const old = practice("old", "primary", "Old practice"); old.active = false;
+  const current = practice("new", "primary", "New practice");
+  const outlines = localOutlines();
+  const data = snapshot({ seasons: [season({ branch_outlines: outlines })], practices: [old, current], milestones: [{ id: "m1", season_id: "season-1", user_id: "user-1", branch: "craft", tier: 1, title: "legacy", practice_id: "old", required_days: 1, unlocked_at: null }], events: [event("2026-09-02", "old")] });
+  const nodes = presentation(data, "season-1").nodes;
+  assert.equal(nodes[0].title, outlines.craft.milestones[0].title);
+  assert.equal(nodes[0].description, outlines.craft.milestones[0].description);
+  assert.equal(nodes[0].branchLabel, outlines.craft.name);
+  assert.equal(nodes[0].status, "completed");
+  assert.deepEqual(nodes[0].instructions, []);
 });
 
 test("a first season has nothing to learn from yet", () => {

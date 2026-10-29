@@ -12,6 +12,7 @@ import { addDays } from "./progression";
 import { validateWeeklyDraft, type WeeklyDraft } from "../../supabase/functions/generate-tree/plan-validation";
 import { fallbackReason, type FallbackReason } from "./engine/fallback";
 import { GENERAL_QUESTIONS, validateQuestions } from "../../supabase/functions/generate-tree/questions";
+import { localOutlines, preparationOutlines, validOutlines } from "../../supabase/functions/generate-tree/outlines";
 import type {
   BlockerId,
   GeneratedEasy,
@@ -801,6 +802,7 @@ export function buildSeedPlan(answers: OnboardingAnswers): GeneratedTree {
   const antiBlockerInstruction = blockerStep(answers.blocker);
 
   const result: GeneratedTree = {
+    branchOutlines: localOutlines(),
     summary: `Your next ${answers.daysRemaining ?? 30} days: ${safeGoal}. One ${answers.timeBudget}-minute practice a day, plus three lighter ones across the week, and a smaller version for the days it does not fit.`,
     stages: answers.legEnd && answers.daysRemaining ? stageRanges(addDays(answers.legEnd, -answers.daysRemaining), answers.daysRemaining).map((range, i) => ({ ...range, title: `Stage ${i + 1}`, outcome: "Review this part of your goal at the checkpoint." })) : undefined,
     realityCheck: answers.daysRemaining ? { level: "stretch", explanation: "This local starter cannot assess the deadline; review the first actions and adjust your goal or date if needed." } : undefined,
@@ -825,7 +827,7 @@ export function buildSeedPlan(answers: OnboardingAnswers): GeneratedTree {
       };
     }),
   };
-  return requiresPreparation(classifyGoal(answers.goal), !!answers.conservativeMode) ? preparationTree(result) : result;
+  return requiresPreparation(classifyGoal(answers.goal), !!answers.conservativeMode) ? { ...preparationTree(result), branchOutlines: preparationOutlines() } : result;
 }
 
 
@@ -873,6 +875,7 @@ export function normalizeTree(
 
   const root = raw as {
     primaryBranch?: unknown;
+    branchOutlines?: unknown;
     summary?: unknown;
     safetyNote?: unknown;
     stages?: unknown;
@@ -883,6 +886,7 @@ export function normalizeTree(
   if (!list) return { ...fallback, pillars: fallback.pillars.map((pillar) => ({ ...pillar, localRepair: true, hasAiContent: false })) };
 
   const result: GeneratedTree = {
+    branchOutlines: validOutlines(root.branchOutlines, classifyGoal(answers.goal)) ? root.branchOutlines : undefined,
     primaryBranch: typeof root.primaryBranch === "string" && PILLARS.some((p) => p.id === root.primaryBranch)
       ? root.primaryBranch as PillarId : undefined,
     stages: Array.isArray(root.stages) ? root.stages as GeneratedTree["stages"] : fallback.stages,
@@ -942,7 +946,7 @@ export function normalizeTree(
       };
     }),
   };
-  return requiresPreparation(classifyGoal(answers.goal), !!answers.conservativeMode) ? preparationTree(result) : result;
+  return requiresPreparation(classifyGoal(answers.goal), !!answers.conservativeMode) ? { ...preparationTree(result), branchOutlines: preparationOutlines() } : result;
 }
 
 
@@ -1077,7 +1081,7 @@ export async function generateTree(
         },
       });
 
-      if (!error && data && typeof data === "object" && Array.isArray(data.pillars) && data.pillars.length > 0) {
+      if (!error && data && typeof data === "object" && Array.isArray(data.pillars) && data.pillars.length > 0 && validOutlines(data.branchOutlines, classifyGoal(answers.goal))) {
         return {
           tree: requiresPreparation(classifyGoal(answers.goal), !!answers.conservativeMode) ? preparationTree(normalizeTree(data, answers)) : normalizeTree(data, answers),
           source: "edge-ai",

@@ -122,7 +122,7 @@ export function PracticeSheet({
             <View style={styles.headerRow}>
               <View style={styles.eyebrowRow}>
                 <PillarIcon pillar={practice.branch} size={14} color={colors.copper} />
-                <Text style={styles.pillarLabel}>{pillar.name} · {practice.role === "primary" ? "Daily" : "Weekly"}</Text>
+                <Text style={styles.pillarLabel}>{today?.season.branch_outlines?.[practice.branch]?.name ?? pillar.name} · {practice.role === "primary" ? "Daily" : "Weekly"}</Text>
               </View>
               <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={12}>
                 <X size={18} strokeWidth={1.6} color={colors.sage} />

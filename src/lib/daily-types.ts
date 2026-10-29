@@ -1,4 +1,5 @@
 import type { BlockerId, IdentityId, PillarId, PersonalizationAnswer, PlanStage, RealityCheck } from "./types";
+import type { ChapterOutlines } from "../../supabase/functions/generate-tree/outlines";
 
 /** One week of a practice. Week 1 is the variant itself; later weeks are its ladder. */
 export interface Rung { title: string; minutes: number; steps: string[] }
@@ -40,6 +41,7 @@ export interface DailyPlan {
   plan_summary: string;
   safety_note: string;
   branch_labels: Record<PillarId, string>;
+  branch_outlines?: ChapterOutlines | null;
   practices: PracticeDraft[];
 }
 export interface Season extends Omit<DailyPlan, "practices"> {

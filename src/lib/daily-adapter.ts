@@ -1,11 +1,12 @@
 import type { DailyPlan, DailySnapshot, PracticeDraft, Rung } from "./daily-types";
 import type { GeneratedEasy, GeneratedNode, GeneratedTree, OnboardingAnswers, PillarId, Profile, TreeNode } from "./types";
-import { classifyGoal } from "./safety-rules";
+import { classifyGoal, requiresPreparation } from "./safety-rules";
 import { PILLARS } from "./pillars";
 import { PROGRESSION } from "./progression";
 import { BUDGETS, buildPlan, detectTheme, validatePlan, validatePractice, MAX_VARIANT_STEPS, type Budget } from "./plans";
 import { rungFor } from "./engine/week";
 import type { TreeSource } from "./gemini";
+import { localOutlines, preparationOutlines } from "../../supabase/functions/generate-tree/outlines";
 
 /**
  * The plan is built from the tree's own words, all of them.
@@ -157,6 +158,8 @@ export function dailyPlanFromTree(
   );
   const containsAi = fromDraft > 0 || partiallyDrafted;
 
+  const useLocalOutlines = source !== "edge-ai" || !containsAi;
+  const outlines = useLocalOutlines ? (requiresPreparation(classifyGoal(answers.goal), !!answers.conservativeMode) ? preparationOutlines() : localOutlines()) : tree.branchOutlines;
   const candidate: DailyPlan = {
     ...base,
     // Where the plan came from is the source of the tree, not how much of it
@@ -169,7 +172,8 @@ export function dailyPlanFromTree(
     season_length_days: answers.daysRemaining ?? null,
     stages: tree.stages,
     reality_check: tree.realityCheck,
-    branch_labels: labels,
+    branch_labels: outlines ? Object.fromEntries(Object.entries(outlines).map(([slot, outline]) => [slot, outline.name])) as typeof labels : labels,
+    branch_outlines: outlines ?? null,
     practices: repaired,
   };
   const problems = validatePlan(candidate);
@@ -177,7 +181,8 @@ export function dailyPlanFromTree(
     // Visible in the Metro logs, so "the plan looks like a template" can be told
     // apart from "the draft was thrown away" without guessing.
     console.warn("[plan] the drafted plan could not be saved as written:", problems);
-    return { ...base, conservative_mode: !!answers.conservativeMode || classifyGoal(answers.goal) === "high-risk", goal_category: classifyGoal(answers.goal), plan_source: "local", personalization_context: answers.context ?? [], target_date: answers.targetDate ?? null, season_length_days: answers.daysRemaining ?? null, stages: tree.stages, reality_check: tree.realityCheck, branch_labels: labels };
+    const local = requiresPreparation(classifyGoal(answers.goal), !!answers.conservativeMode) ? preparationOutlines() : localOutlines();
+    return { ...base, conservative_mode: !!answers.conservativeMode || classifyGoal(answers.goal) === "high-risk", goal_category: classifyGoal(answers.goal), plan_source: "local", personalization_context: answers.context ?? [], target_date: answers.targetDate ?? null, season_length_days: answers.daysRemaining ?? null, stages: tree.stages, reality_check: tree.realityCheck, branch_labels: Object.fromEntries(Object.entries(local).map(([slot, outline]) => [slot, outline.name])) as typeof labels, branch_outlines: local };
   }
   if (fromDraft < repaired.length) {
     console.warn(`[plan] ${repaired.length - fromDraft} branch(es) fell back to the curated library`);
@@ -191,25 +196,28 @@ export function presentation(snapshot: DailySnapshot, seasonId?: string): { prof
   if (!season || (!progress && !seasonId)) return { profile: null, nodes: [] };
   const practices = snapshot.practices.filter((p) => p.season_id === season.id && p.active);
   const nodes: TreeNode[] = snapshot.milestones
-    .filter((m) => m.season_id === season.id && practices.some((p) => p.id === m.practice_id))
+    .filter((m) => m.season_id === season.id && practices.some((p) => season.branch_outlines ? p.branch === m.branch : p.id === m.practice_id))
     .map((m) => {
-      const practice = practices.find((p) => p.id === m.practice_id);
-      const unlocked = seasonId
-        ? new Set(snapshot.events.filter((e) => e.season_id === season.id && e.practice_id === m.practice_id && !e.undone_at && (e.kind === "full" || e.kind === "easy")).map((e) => e.local_date)).size >= m.required_days
-        : Boolean(progress?.unlocked_milestones.includes(m.id));
-      const branchLabel = (season.branch_labels as Record<PillarId, string> | null)?.[m.branch];
+      const practice = practices.find((p) => season.branch_outlines ? p.branch === m.branch : p.id === m.practice_id);
+      const isUnlocked = (milestone: typeof m) => seasonId
+        ? new Set(snapshot.events.filter((e) => e.season_id === season.id && (season.branch_outlines ? snapshot.practices.some(p => p.id === e.practice_id && p.branch === milestone.branch) : e.practice_id === milestone.practice_id) && !e.undone_at && (e.kind === "full" || e.kind === "easy")).map((e) => e.local_date)).size >= milestone.required_days
+        : Boolean(progress?.unlocked_milestones.includes(milestone.id));
+      const unlocked = isUnlocked(m);
+      const branchLabel = season.branch_outlines?.[m.branch]?.name ?? (season.branch_labels as Record<PillarId, string> | null)?.[m.branch];
       // Each tier shows that week's real step, so the tree grows deeper rather
       // than repeating the same opening node four times.
       const rung = rungFor(practice?.full_variant, m.tier);
+      const outline = season.branch_outlines?.[m.branch]?.milestones[m.tier - 1];
       return {
         id: practice?.id ?? m.practice_id,
         pillar: m.branch,
         tier: m.tier - 1,
-        title: rung.title || practice?.title || m.title,
-        duration: `${rung.minutes} min`,
-        description: practice?.why ?? "",
-        instructions: rung.steps,
-        status: unlocked ? "completed" : "active",
+        title: outline?.title ?? (rung.title || practice?.title || m.title),
+        duration: outline ? "" : `${rung.minutes} min`,
+        description: outline?.description ?? practice?.why ?? "",
+        instructions: outline ? [] : rung.steps,
+        outline: !!outline,
+        status: unlocked ? "completed" : outline && snapshot.milestones.some(other => other.season_id === m.season_id && other.branch === m.branch && other.tier < m.tier && !isUnlocked(other)) ? "locked" : "active",
         completedAt: unlocked ? m.unlocked_at : null,
         branchLabel,
       };
@@ -254,6 +262,7 @@ export function planFromSeason(snapshot: DailySnapshot, seasonId: string): Daily
     plan_summary: season.plan_summary,
     safety_note: season.safety_note,
     branch_labels: season.branch_labels,
+    branch_outlines: season.branch_outlines,
     practices: practices
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((practice) => ({

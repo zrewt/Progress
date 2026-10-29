@@ -178,6 +178,29 @@ test('new target-date legs preserve legacy seasons and scale daily and weekly mi
  await assert.rejects(()=>rpc(db,'start_next_season',[{...plan,target_date:target,season_length_days:30},'UTC','Player','archived']));
 });
 
+test('new chapter outlines remain fixed through weekly acceptance and replacements while growth survives', async(t)=>{
+ const db=await setup(); t.after(()=>db.close()); await asUser(db);
+ const outlines=Object.fromEntries(['body','mind','craft','connection'].map((slot,index)=>[slot,{name:['Ride practice','Technique','Planning','Recovery'][index],milestones:['Start','Try','Build','Review'].map(title=>({title,description:'A gentle checkpoint for this chapter.'}))}]));
+ const target=(await db.query("select to_char((now() at time zone 'UTC')::date + 21,'YYYY-MM-DD') value")).rows[0].value;
+ const season=await rpc(db,'start_next_season',[{...plan,branch_outlines:outlines,target_date:target,season_length_days:21},'UTC','Rider','archived']);
+ const original=(await db.query('select branch_outlines,branch_labels from public.seasons where id=$1',[season])).rows[0];
+ assert.deepEqual(original.branch_outlines,outlines); assert.equal(original.branch_labels.body,'Ride practice');
+ const practices=(await db.query('select * from public.practices where season_id=$1 order by sort_order',[season])).rows;
+ await db.exec('reset role'); await db.query("update public.seasons set started_on=started_on-7,ends_on=ends_on-7 where id=$1",[season]); await asUser(db);
+ const start=(await db.query("select to_char(started_on,'YYYY-MM-DD') value from public.seasons where id=$1",[season])).rows[0].value;
+ for(let i=0;i<3;i++){const at=new Date(start+'T12:00:00Z');at.setUTCDate(at.getUTCDate()+i);await rpc(db,'complete_practice',[season,practices[0].id,'easy',crypto.randomUUID(),at.toISOString()]);}
+ const before=await rpc(db,'get_progress',[season]); assert.ok(before.unlocked_milestones.length>0);
+ const milestones=(await db.query('select * from public.milestones where season_id=$1 order by branch,tier',[season])).rows;
+ const draft={effective_week:2,expected_version:1,source:'local',practices:practices.map(p=>({practice_id:p.id,title:p.title,why:p.why,full_variant:p.full_variant,easy_variant:p.easy_variant}))};
+ await rpc(db,'accept_practice_week',[season,draft]);
+ const replacement={...practices[0],title:'A different practice',why:'A manageable option.'};
+ const replacementId=await rpc(db,'replace_practice',[season,practices[0].id,replacement]); assert.notEqual(replacementId,practices[0].id);
+ assert.deepEqual((await db.query('select * from public.milestones where season_id=$1 order by branch,tier',[season])).rows,milestones);
+ assert.deepEqual((await rpc(db,'get_progress',[season])).unlocked_milestones,before.unlocked_milestones);
+ assert.deepEqual((await db.query('select branch_outlines,branch_labels from public.seasons where id=$1',[season])).rows[0],original);
+ await assert.rejects(()=>rpc(db,'update_plan',[season,{...plan,branch_outlines:outlines}]));
+});
+
 test('rolling acceptance preserves milestone progress, rejects stale devices and respects consent', async(t)=>{
  const db=await setup(); t.after(()=>db.close()); await asUser(db);
  const target=(await db.query("select to_char((now() at time zone 'UTC')::date + 21,'YYYY-MM-DD') value")).rows[0].value;

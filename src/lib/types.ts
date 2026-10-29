@@ -1,3 +1,5 @@
+import type { ChapterOutlines } from "../../supabase/functions/generate-tree/outlines";
+
 export type PillarId = "body" | "mind" | "craft" | "connection";
 
 export type NodeStatus = "locked" | "active" | "completed";
@@ -50,6 +52,7 @@ export interface TreeNode {
   status: NodeStatus;
   completedAt?: string | null;
   branchLabel?: string;
+  outline?: boolean;
 }
 
 export interface Profile {
@@ -97,6 +100,7 @@ export interface PlanStage { start: string; end: string; title: string; outcome:
 export interface RealityCheck { level: "comfortable" | "stretch" | "very tight"; explanation: string }
 
 export interface GeneratedTree {
+  branchOutlines?: ChapterOutlines;
   primaryBranch?: PillarId;
   stages?: PlanStage[];
   realityCheck?: RealityCheck;

@@ -60,6 +60,7 @@ export function SkillTree({
 }) {
   const { width } = useWindowDimensions();
   const wide = width >= 760;
+  const [selectedOutline, setSelectedOutline] = useState<string | null>(null);
   const [selectedPillar, setSelectedPillar] = useState<PillarId>(
     () => firstActiveNode(nodes)?.pillar ?? PILLARS[0].id,
   );
@@ -78,6 +79,25 @@ export function SkillTree({
   const mobileBranch =
     branches.find((branch) => branch.pillar.id === selectedPillar) ?? branches[0];
   const completed = nodes.filter((node) => node.status === "completed").length;
+
+  if (nodes.some(node => node.outline)) return <View style={{ gap: 16, marginTop: 20 }}>
+    <Display style={styles.sectionTitle}>Your branches</Display>
+    <Body>Milestones are directions, not tasks. They grow through completed practice days.</Body>
+    {branches.map(({ pillar, nodes: branchNodes }) => <View key={pillar.id} style={styles.branchPanel}>
+      <View style={styles.branchHeader}><Display style={styles.branchName}>{branchNodes[0]?.branchLabel ?? pillar.name}</Display></View>
+      {branchNodes.map(node => {
+        const key = `${node.pillar}-${node.tier}`;
+        const expanded = selectedOutline === key;
+        return <Pressable key={key} onPress={() => setSelectedOutline(expanded ? null : key)} accessibilityRole="button" accessibilityState={{ expanded }} accessibilityLabel={`${node.title}, ${node.status === "locked" ? "future" : node.status === "active" ? "current" : "completed"} milestone`} style={styles.branchNode}>
+          <View style={styles.branchCopy}>
+            <Text style={styles.branchStatus}>{node.status === "completed" ? "COMPLETED" : node.status === "active" ? "CURRENT" : "FUTURE"}</Text>
+            <Text style={styles.branchTitle}>{node.title}</Text>
+            {expanded ? <Body>{node.description}</Body> : null}
+          </View>
+        </Pressable>;
+      })}
+    </View>)}
+  </View>;
 
   return (
     <View>
