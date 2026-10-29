@@ -11,7 +11,7 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
-import { colors, fonts, hairline } from "../theme";
+import { alpha, colors, fonts, hairline } from "../theme";
 import { Label } from "./Type";
 
 export function PrimaryButton({
@@ -44,7 +44,7 @@ export function PrimaryButton({
         styles.primary,
         trailing ? styles.primaryBetween : styles.primaryCenter,
         isDisabled && styles.primaryDisabled,
-        pressed && !isDisabled && { backgroundColor: colors.copperLight },
+        pressed && !isDisabled && { backgroundColor: colors.copperDim },
         style,
       ]}
     >
@@ -84,7 +84,7 @@ export function QuietButton({
       style={({ pressed }) => [
         styles.quiet,
         disabled && { opacity: 0.4 },
-        pressed && !disabled && { backgroundColor: "rgba(233,226,208,0.05)" },
+        pressed && !disabled && { backgroundColor: alpha(colors.bone, 0.04) },
         style,
       ]}
     >
@@ -150,7 +150,7 @@ export function Field({
           cursorColor={colors.copper}
           style={[
             styles.input,
-            { borderBottomColor: focused ? colors.copper : "rgba(233,226,208,0.2)" },
+            { borderColor: focused ? colors.copper : alpha(colors.bone, 0.18) },
             style,
           ]}
         />
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingVertical: 13,
     backgroundColor: colors.copper,
-    borderRadius: 2,
+    borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -194,8 +194,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: "rgba(233,226,208,0.2)",
-    borderRadius: 2,
+    borderColor: alpha(colors.bone, 0.2),
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -210,16 +210,20 @@ const styles = StyleSheet.create({
   fieldRow: { position: "relative", justifyContent: "center" },
   input: {
     width: "100%",
-    paddingVertical: 11,
-    paddingRight: 12,
+    minHeight: 50,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingRight: 48,
+    backgroundColor: colors.ink850,
     fontFamily: fonts.sans,
     fontSize: 15,
     color: colors.bone,
-    borderBottomWidth: 1,
+    borderWidth: 1,
+    borderRadius: 12,
   },
   fieldAccessory: {
     position: "absolute",
-    right: 0,
+    right: 5,
     height: 44,
     width: 40,
     alignItems: "center",

@@ -1,37 +1,37 @@
-/**
- * The visual language of Vitality Tree, translated from the web app:
- * a nocturnal field journal — warm parchment on olive charcoal, copper for
- * action, lichen for completion.
- */
+/** A calm, warm paper palette with ink, earth and understated botanical accents. */
 
 export const colors = {
-  canvas: "#11140F",
-  ink950: "#0B0D09",
-  ink900: "#11140F",
-  ink850: "#171B14",
-  ink800: "#1D2219",
-  ink700: "#262C21",
-  ink600: "#31382A",
+  canvas: "#EEEDE7",
+  ink950: "#FFFFFF",
+  ink900: "#EEEDE7",
+  ink850: "#FCFBF8",
+  ink800: "#F0EEE8",
+  ink700: "#ECEAE3",
+  ink600: "#E1DED5",
 
-  bone: "#E9E2D0",
-  boneDim: "#D3CCB9",
-  boneFaint: "#BDB7A4",
+  bone: "#262B29",
+  boneDim: "#454E49",
+  boneFaint: "#59645E",
 
-  sage: "#A9A48F",
-  sageDim: "#8B8877",
-  sageDeep: "#918E7C",
+  sage: "#56625B",
+  sageDim: "#66726A",
+  sageDeep: "#707C74",
 
-  lichen: "#C6CB9C",
-  lichenDim: "#9BA177",
+  lichen: "#486C5A",
+  lichenDim: "#486C5A",
 
-  copper: "#C17845",
-  copperLight: "#D99A68",
-  copperDim: "#8E5A35",
+  copper: "#745044",
+  copperLight: "#745044",
+  copperDim: "#654338",
 
-  clay: "#BE7360",
-  heather: "#B3A3B8",
-  ochre: "#C1A473",
-  moss: "#92A89B",
+  clay: "#A04C40",
+  heather: "#75617C",
+  ochre: "#81613F",
+  moss: "#486C5A",
+
+  focusSurface: "#E2EAE3",
+  focusBorder: "#B7C8B9",
+  selectionSurface: "#F2E5DC",
 } as const;
 
 /** Translucent ink/bone helpers, matching the Tailwind opacity syntax. */
@@ -59,7 +59,7 @@ export const hairline = alpha(colors.bone, 0.1);
 export const layout = {
   gutter: 20,
   maxWidth: 960,
-  radius: 2,
+  radius: 14,
 } as const;
 
 export const type = {
@@ -70,10 +70,9 @@ export const type = {
     color: colors.sage,
   },
   micro: {
-    fontFamily: fonts.mono,
-    fontSize: 9.5,
-    letterSpacing: 1.2,
-    textTransform: "uppercase" as const,
+    fontFamily: fonts.sansMedium,
+    fontSize: 11,
+    letterSpacing: 0.2,
     color: colors.sageDim,
   },
   display: {

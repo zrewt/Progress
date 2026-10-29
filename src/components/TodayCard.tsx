@@ -21,6 +21,7 @@ export function TodayCard({
   const [dismissed, setDismissed] = useState<MidWeekOffer["kind"][]>([]);
   const [lighterBusy, setLighterBusy] = useState(false);
   const [offerError, setOfferError] = useState<string | null>(null);
+  const [showSupporting, setShowSupporting] = useState(false);
   if (!today) return null;
 
   const { primary, season, countedToday, easierByDefault, supporting, week } = today;
@@ -56,12 +57,12 @@ export function TodayCard({
   }
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, countedToday && styles.cardComplete]}>
       <View style={styles.head}>
         <View style={styles.eyebrowRow}>
-          <PillarIcon pillar={primary.branch} size={14} color={pillar.accent} />
-          <Label style={{ color: pillar.accent }}>
-            {pillar.name} · {season.branch_labels?.[primary.branch] ?? "Your practice"}
+          <PillarIcon pillar={primary.branch} size={16} color={colors.copper} />
+          <Label style={{ color: colors.copper }}>
+            {countedToday ? "Today · Complete" : `Your next step · ${pillar.name}`}
           </Label>
         </View>
         <Micro>Day {today.dayNumber}</Micro>
@@ -155,8 +156,11 @@ export function TodayCard({
 
       {dueSupporting.length ? (
         <View style={styles.supporting}>
-          <Micro style={{ color: colors.lichenDim }}>Also available this week</Micro>
-          {dueSupporting.map((practice) => {
+          <Pressable onPress={() => setShowSupporting((value) => !value)} accessibilityRole="button" accessibilityState={{ expanded: showSupporting }} style={styles.supportToggle}>
+            <Text style={styles.supportToggleText}>Optional practices this week ({dueSupporting.length})</Text>
+            <Text style={styles.supportToggleText}>{showSupporting ? "Hide" : "View"}</Text>
+          </Pressable>
+          {showSupporting ? dueSupporting.map((practice) => {
             const accent = PILLAR_MAP[practice.branch];
             return (
               <Pressable
@@ -166,7 +170,7 @@ export function TodayCard({
                 accessibilityLabel={`Open ${practice.title}`}
                 style={({ pressed }) => [styles.supportRow, pressed && { backgroundColor: alpha(colors.bone, 0.04) }]}
               >
-                <PillarIcon pillar={practice.branch} size={13} color={accent.accent} />
+                <PillarIcon pillar={practice.branch} size={14} color={colors.sage} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.supportTitle}>{practice.title}</Text>
                   <Text style={styles.supportMeta}>{accent.name} · {practice.full_variant.minutes} min · optional</Text>
@@ -174,7 +178,7 @@ export function TodayCard({
                 <ArrowRight size={13} strokeWidth={1.6} color={colors.sageDim} />
               </Pressable>
             );
-          })}
+          }) : null}
         </View>
       ) : null}
     </View>
@@ -184,21 +188,23 @@ export function TodayCard({
 const styles = StyleSheet.create({
   card: {
     marginTop: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: hairline,
-    backgroundColor: alpha(colors.ink850, 0.6),
+    borderWidth: 1,
+    borderColor: colors.focusBorder,
+    borderRadius: 18,
+    backgroundColor: colors.focusSurface,
     padding: 20,
   },
+  cardComplete: { backgroundColor: colors.ink850, borderColor: hairline },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
   title: { marginTop: 16, fontSize: 28, lineHeight: 32, letterSpacing: -0.8 },
   body: { marginTop: 9, lineHeight: 21 },
   metaRow: { marginTop: 14, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7 },
-  metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  metaText: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1, textTransform: "uppercase", color: colors.sageDim },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: alpha(colors.ink950, 0.65) },
+  metaText: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.sage },
   metaDivider: { fontFamily: fonts.mono, fontSize: 9.5, color: colors.sageDeep },
   actions: { marginTop: 18 },
-  hint: { marginTop: 10, textTransform: "none", letterSpacing: 0.3, lineHeight: 15 },
+  hint: { marginTop: 10, lineHeight: 17 },
   weekNote: { marginTop: 6, textTransform: "none", letterSpacing: 0.3, lineHeight: 15, color: colors.copperLight },
   againRow: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 },
   againText: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.sage },
@@ -213,6 +219,8 @@ const styles = StyleSheet.create({
   offerDismiss: { minHeight: 44, justifyContent: "center", paddingHorizontal: 4 },
   offerDismissText: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.sage },
   supporting: { marginTop: 20, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hairline, gap: 4 },
+  supportToggle: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  supportToggleText: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.copper },
   supportRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 2 },
   supportTitle: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.bone },
   supportMeta: { marginTop: 2, fontFamily: fonts.sans, fontSize: 10.5, color: colors.sage },

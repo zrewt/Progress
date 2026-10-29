@@ -2,7 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check, X } from "lucide-react-native";
 import { AI_CONSENT_COPY } from "../lib/config";
-import { alpha, colors, fonts } from "../theme";
+import { colors, fonts } from "../theme";
 import { PrimaryButton, QuietButton } from "./Controls";
 import { Body, Display, Label, Micro } from "./Type";
 
@@ -64,8 +64,8 @@ export function ConsentSheet({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(11,13,9,0.9)" },
-  sheet: { width: "100%", maxHeight: "92%", backgroundColor: colors.canvas, borderTopWidth: 1, borderTopColor: alpha(colors.bone, 0.16) },
+  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(25,32,28,0.45)" },
+  sheet: { width: "100%", maxHeight: "92%", backgroundColor: colors.canvas, borderTopLeftRadius: 22, borderTopRightRadius: 22 },
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, gap: 6 },
   head: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
   title: { flex: 1, fontSize: 26, lineHeight: 29 },

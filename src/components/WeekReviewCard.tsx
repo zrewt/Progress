@@ -148,18 +148,18 @@ export function WeekReviewCard() {
 const styles = StyleSheet.create({
   card: {
     marginTop: 18, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.copper, 0.4),
-    backgroundColor: alpha(colors.copper, 0.06), padding: 18, gap: 10,
+    backgroundColor: colors.selectionSurface, borderRadius: 18, padding: 20, gap: 10,
   },
   title: { fontSize: 22, lineHeight: 26 },
   body: { lineHeight: 20 },
   chipRow: { flexDirection: "row", gap: 8 },
-  chip: { flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center", borderRadius: 2, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.2) },
+  chip: { flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center", borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.2) },
   chipOn: { backgroundColor: colors.lichen, borderColor: colors.lichen },
   chipText: { fontFamily: fonts.sansSemi, fontSize: 13, color: colors.bone },
   scaleRow: { flexDirection: "row", justifyContent: "space-between", marginTop: -4 },
   input: {
     minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.18),
-    borderRadius: 2, padding: 10, color: colors.bone, fontFamily: fonts.sans, fontSize: 13,
+    borderRadius: 12, padding: 10, color: colors.bone, fontFamily: fonts.sans, fontSize: 13,
   },
   proposal: { borderLeftWidth: 2, borderLeftColor: colors.lichen, paddingLeft: 12, gap: 6 },
   proposalTitle: { fontSize: 20, lineHeight: 24 },

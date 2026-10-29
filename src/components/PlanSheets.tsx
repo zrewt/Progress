@@ -324,19 +324,19 @@ export function SeasonHistory() {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(11,13,9,0.86)" },
-  sheet: { width: "100%", maxHeight: "92%", backgroundColor: colors.canvas, borderTopWidth: 1, borderTopColor: alpha(colors.bone, 0.16), paddingHorizontal: 20 },
+  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(25,32,28,0.45)" },
+  sheet: { width: "100%", maxHeight: "92%", backgroundColor: colors.canvas, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 20 },
   sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 18, paddingBottom: 12 },
   sheetTitle: { fontSize: 26, lineHeight: 29 },
   sheetBody: { paddingBottom: 14, gap: 12 },
   lead: { lineHeight: 20 },
   input: {
     marginTop: 8, minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.2),
-    borderRadius: 2, paddingHorizontal: 11, paddingVertical: 10, color: colors.bone,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 10, color: colors.bone,
     fontFamily: fonts.sans, fontSize: 14,
   },
   chipRow: { flexDirection: "row", gap: 8, marginTop: 8 },
-  chip: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: 2, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.2) },
+  chip: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.2) },
   chipOn: { backgroundColor: colors.lichen, borderColor: colors.lichen },
   chipText: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.bone },
   statGrid: { flexDirection: "row", flexWrap: "wrap", borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: hairline },

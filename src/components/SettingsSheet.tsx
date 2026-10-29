@@ -188,8 +188,8 @@ export function SettingsSheet({ visible, onClose }: { visible: boolean; onClose:
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(11,13,9,0.88)" },
-  sheet: { width: "100%", maxHeight: "90%", backgroundColor: colors.canvas, borderTopWidth: 1, borderTopColor: alpha(colors.bone, 0.16) },
+  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(25,32,28,0.45)" },
+  sheet: { width: "100%", maxHeight: "90%", backgroundColor: colors.canvas, borderTopLeftRadius: 22, borderTopRightRadius: 22, overflow: "hidden" },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10 },
   title: { fontSize: 26, lineHeight: 29 },
   content: { paddingHorizontal: 20, paddingBottom: 12, gap: 18 },

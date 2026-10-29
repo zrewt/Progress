@@ -120,7 +120,7 @@ export default function App() {
     <SafeAreaProvider>
       <View style={styles.root}>
         <Background />
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <GameProvider>
           <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
             <Root />

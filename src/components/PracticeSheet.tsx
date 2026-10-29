@@ -121,7 +121,7 @@ export function PracticeSheet({
           <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} bounces={false}>
             <View style={styles.headerRow}>
               <View style={styles.eyebrowRow}>
-                <PillarIcon pillar={practice.branch} size={14} color={pillar.accent} />
+                <PillarIcon pillar={practice.branch} size={14} color={colors.copper} />
                 <Text style={styles.pillarLabel}>{pillar.name} · {practice.role === "primary" ? "Daily" : "Weekly"}</Text>
               </View>
               <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={12}>
@@ -276,9 +276,9 @@ export function PracticeSheet({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(11,13,9,0.86)" },
-  sheet: { width: "100%", maxHeight: "92%", backgroundColor: colors.canvas, borderTopWidth: 1, borderTopColor: alpha(colors.bone, 0.16) },
-  accentBar: { height: 2, width: "100%" },
+  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(25,32,28,0.45)" },
+  sheet: { width: "100%", maxHeight: "92%", backgroundColor: colors.canvas, borderTopLeftRadius: 22, borderTopRightRadius: 22, overflow: "hidden" },
+  accentBar: { height: 0, width: "100%" },
   content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 12 },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   metaDivider: { fontFamily: fonts.mono, fontSize: 9.5, color: colors.sageDeep },
   easyToggle: {
     marginTop: 16, flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44,
-    paddingHorizontal: 12, paddingVertical: 10, borderRadius: 2,
+    paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.copper, 0.55), backgroundColor: alpha(colors.copper, 0.08),
   },
   easyToggleOn: { borderColor: alpha(colors.lichen, 0.6), backgroundColor: alpha(colors.lichen, 0.1) },
@@ -304,18 +304,18 @@ const styles = StyleSheet.create({
   resetText: { fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.sage },
   timerNote: { marginTop: 6, textTransform: "none", letterSpacing: 0.3 },
   chipRow: { marginTop: 8, flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  chip: { minHeight: 40, justifyContent: "center", paddingHorizontal: 11, borderRadius: 2, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.18) },
+  chip: { minHeight: 40, justifyContent: "center", paddingHorizontal: 11, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.18) },
   chipOn: { backgroundColor: colors.lichen, borderColor: colors.lichen },
   chipText: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.boneDim },
   input: {
     marginTop: 8, minHeight: 68, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.18),
-    borderRadius: 2, padding: 11, color: colors.bone, fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20,
+    borderRadius: 12, padding: 11, color: colors.bone, fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20,
     textAlignVertical: "top",
   },
   swapLink: { marginTop: 16, minHeight: 44, justifyContent: "center" },
   swapText: { fontFamily: fonts.sansMedium, fontSize: 11.5, color: colors.sage, textDecorationLine: "underline" },
   alternatives: { gap: 8 },
-  alternative: { borderWidth: StyleSheet.hairlineWidth, borderColor: hairline, padding: 12, borderRadius: 2, backgroundColor: alpha(colors.ink850, 0.6) },
+  alternative: { borderWidth: StyleSheet.hairlineWidth, borderColor: hairline, padding: 12, borderRadius: 12, backgroundColor: alpha(colors.ink850, 0.6) },
   alternativeTitle: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.bone },
   alternativeWhy: { marginTop: 4, fontFamily: fonts.sans, fontSize: 11.5, lineHeight: 17, color: colors.sage },
   footer: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hairline, paddingHorizontal: 20, paddingTop: 14, gap: 9 },

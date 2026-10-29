@@ -13,10 +13,9 @@ import { ArrowRight, Eye, EyeOff } from "lucide-react-native";
 import { AGE_OPTIONS, UNDER_13_MESSAGE, type AgeBracket } from "../lib/age";
 import { useGame } from "../lib/game-context";
 import { alpha, colors, fonts, hairline } from "../theme";
-import { BotanicalBranch } from "./BotanicalBranch";
 import { BrandMark } from "./BrandMark";
 import { Field, PrimaryButton } from "./Controls";
-import { Body, Display, Label, Micro } from "./Type";
+import { Body, Display, Label } from "./Type";
 
 type Tab = "signin" | "signup";
 
@@ -79,18 +78,11 @@ export function AuthScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View pointerEvents="none" style={styles.branchClip}>
-          <View style={styles.branch}>
-            <BotanicalBranch height={360} opacity={0.08} />
-          </View>
-        </View>
-
         <View style={styles.topRow}>
           <View style={styles.brandRow}>
             <BrandMark size={26} />
             <Display style={styles.brandName}>Vitality Tree</Display>
           </View>
-          <Micro style={{ color: colors.sageDim }}>Vol. I</Micro>
         </View>
 
         <View style={styles.hero}>
@@ -237,12 +229,6 @@ export function AuthScreen() {
           </Text>
         </View>
 
-        <View style={styles.spacer} />
-
-        <View style={styles.footer}>
-          <Micro>Your life is the game.</Micro>
-          <Micro>10 XP a practice</Micro>
-        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -261,15 +247,6 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 20,
   },
-  branchClip: {
-    position: "absolute",
-    top: 42,
-    left: 0,
-    right: 0,
-    height: 370,
-    overflow: "hidden",
-  },
-  branch: { position: "absolute", right: -96, top: 0 },
   topRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -277,7 +254,7 @@ const styles = StyleSheet.create({
   },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandName: { fontSize: 18, letterSpacing: -0.4 },
-  hero: { marginTop: 52 },
+  hero: { marginTop: 44 },
   headline: { marginTop: 14, fontSize: 44, lineHeight: 45 },
   heroCopy: { marginTop: 14, maxWidth: 320, lineHeight: 21 },
   tabs: {
@@ -317,13 +294,4 @@ const styles = StyleSheet.create({
   },
   dot: { width: 4, height: 4, borderRadius: 2 },
   modeText: { fontFamily: fonts.sans, fontSize: 10.5, color: colors.sageDim },
-  spacer: { flex: 1, minHeight: 32 },
-  footer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: hairline,
-    paddingTop: 16,
-  },
 });

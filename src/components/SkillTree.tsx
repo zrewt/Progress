@@ -34,9 +34,9 @@ const STATUS_LABEL: Record<NodeStatus, string> = {
 };
 
 const STROKE: Record<NodeStatus, string> = {
-  completed: "rgba(198,203,156,0.92)",
-  active: "rgba(217,154,104,0.88)",
-  locked: "rgba(233,226,208,0.3)",
+  completed: colors.lichen,
+  active: colors.copper,
+  locked: alpha(colors.bone, 0.3),
 };
 
 function NodeGlyph({ status, size = 18 }: { status: NodeStatus; size?: number }) {
@@ -81,7 +81,7 @@ export function SkillTree({
 
   return (
     <View>
-      <View style={styles.sectionHead}>
+      <View style={[styles.sectionHead, { marginTop: 20 }]}>
         <View style={{ flex: 1 }}>
           <Label>The progression</Label>
           <Display style={styles.sectionTitle}>The four branches</Display>
@@ -109,7 +109,7 @@ export function SkillTree({
                     { left: `${(LANES[lane].x / VIEW_W) * 100}%` },
                   ]}
                 >
-                  <DisplayItalic style={[styles.laneRoman, { color: pillar.accent }]}>
+                  <DisplayItalic style={[styles.laneRoman, { color: colors.copper }]}>
                     {pillar.roman}
                   </DisplayItalic>
                   <Text style={styles.laneName}>{pillar.name}</Text>
@@ -132,25 +132,25 @@ export function SkillTree({
               <G fill="none" strokeLinecap="round">
                 <Path
                   d="M500 616C492 556 506 496 499 436C493 382 505 328 500 268"
-                  stroke="rgba(233,226,208,0.32)"
+                  stroke={alpha(colors.bone, 0.32)}
                   strokeWidth={1.4}
                   vectorEffect="non-scaling-stroke"
                 />
                 <Path
                   d="M508 616C500 556 514 496 507 436C501 382 513 328 508 268"
-                  stroke="rgba(233,226,208,0.1)"
+                  stroke={alpha(colors.bone, 0.1)}
                   strokeWidth={1}
                   vectorEffect="non-scaling-stroke"
                 />
                 <Path
                   d="M500 616C487 622 475 626 463 632"
-                  stroke="rgba(233,226,208,0.12)"
+                  stroke={alpha(colors.bone, 0.12)}
                   strokeWidth={1}
                   vectorEffect="non-scaling-stroke"
                 />
                 <Path
                   d="M500 616C513 622 525 626 537 632"
-                  stroke="rgba(233,226,208,0.12)"
+                  stroke={alpha(colors.bone, 0.12)}
                   strokeWidth={1}
                   vectorEffect="non-scaling-stroke"
                 />
@@ -380,7 +380,7 @@ export function SkillTree({
                   <DisplayItalic
                     style={[
                       styles.tabRoman,
-                      { color: selected ? pillar.accent : colors.sageDim },
+                      { color: selected ? colors.copper : colors.sageDim },
                     ]}
                   >
                     {pillar.roman}
@@ -405,7 +405,7 @@ export function SkillTree({
             <View style={styles.branchHeader}>
               <View style={{ flex: 1 }}>
                 <DisplayItalic
-                  style={[styles.branchRoman, { color: mobileBranch.pillar.accent }]}
+                  style={[styles.branchRoman, { color: colors.copper }]}
                 >
                   Branch {mobileBranch.pillar.roman}
                 </DisplayItalic>
@@ -651,6 +651,9 @@ const styles = StyleSheet.create({
     marginTop: 18,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: hairline,
+    borderRadius: 14,
+    backgroundColor: colors.ink850,
+    overflow: "hidden",
   },
   branchHeader: {
     flexDirection: "row",

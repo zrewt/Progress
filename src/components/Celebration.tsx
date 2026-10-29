@@ -1,12 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
-  Animated,
-  Easing,
   Pressable,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { Check, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,136 +12,24 @@ import { useGame } from "../lib/game-context";
 import { alpha, colors, fonts } from "../theme";
 import { Display, Label, Mono } from "./Type";
 
-const LEAF_COLORS = [colors.lichen, colors.copperLight, colors.heather, colors.moss];
-
-function Leaf({
-  index,
-  burstId,
-  fallDistance,
-}: {
-  index: number;
-  burstId: number;
-  fallDistance: number;
-}) {
-  const [progress] = useState(() => new Animated.Value(0));
-  const left = (index * 47 + 9) % 100;
-  const drift = ((index % 6) - 2.5) * 30;
-  const delay = (index % 7) * 90;
-  const duration = 2100 + ((index * 11) % 6) * 160;
-  const size = 5 + (index % 3) * 2;
-  const color = LEAF_COLORS[index % LEAF_COLORS.length];
-
-  useEffect(() => {
-    progress.setValue(0);
-    const animation = Animated.timing(progress, {
-      toValue: 1,
-      duration,
-      delay,
-      easing: Easing.in(Easing.quad),
-      useNativeDriver: true,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [burstId, delay, duration, progress]);
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        left: `${left}%`,
-        top: "14%",
-        width: size,
-        height: size * 1.6,
-        backgroundColor: color,
-        borderTopLeftRadius: size,
-        borderBottomRightRadius: size,
-        borderTopRightRadius: 1,
-        borderBottomLeftRadius: 1,
-        opacity: progress.interpolate({
-          inputRange: [0, 0.12, 0.72, 1],
-          outputRange: [0, 1, 0.9, 0],
-        }),
-        transform: [
-          {
-            translateY: progress.interpolate({
-              inputRange: [0, 1],
-              outputRange: [-10, fallDistance],
-            }),
-          },
-          {
-            translateX: progress.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, drift],
-            }),
-          },
-          {
-            rotate: progress.interpolate({
-              inputRange: [0, 1],
-              outputRange: ["0deg", "320deg"],
-            }),
-          },
-        ],
-      }}
-    />
-  );
-}
-
 export function Celebration() {
   const { celebration, dismissCelebration } = useGame();
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
-  const [rise] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (!celebration) return;
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
       () => undefined,
     );
-    rise.setValue(0);
-    Animated.timing(rise, {
-      toValue: 1,
-      duration: 380,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
     const timer = setTimeout(dismissCelebration, 4400);
     return () => clearTimeout(timer);
-  }, [celebration, dismissCelebration, rise]);
+  }, [celebration, dismissCelebration]);
 
   if (!celebration) return null;
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        {Array.from({ length: 16 }, (_, index) => (
-          <Leaf
-            key={`${celebration.id}-${index}`}
-            index={index}
-            burstId={celebration.id}
-            fallDistance={height * 0.66}
-          />
-        ))}
-      </View>
-
-      <Animated.View
-        pointerEvents="box-none"
-        style={[
-          styles.toastWrap,
-          { bottom: 14 + insets.bottom },
-          {
-            opacity: rise,
-            transform: [
-              {
-                translateY: rise.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [18, 0],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
+      <View pointerEvents="box-none" style={[styles.toastWrap, { bottom: 14 + insets.bottom }]} accessibilityRole="alert">
         <View style={styles.toast}>
           <View style={styles.check}>
             <Check size={16} strokeWidth={2.6} color={colors.ink950} />
@@ -188,7 +73,7 @@ export function Celebration() {
             <X size={14} strokeWidth={1.6} color={colors.sageDim} />
           </Pressable>
         </View>
-      </Animated.View>
+      </View>
     </View>
   );
 }
@@ -208,9 +93,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: alpha(colors.lichen, 0.25),
     padding: 14,
+    borderRadius: 14,
     shadowColor: "#000",
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 12 },
     elevation: 8,
   },

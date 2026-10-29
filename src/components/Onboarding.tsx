@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Animated,
-  Easing,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -42,12 +41,11 @@ import { planningLeg } from "../lib/engine/schedule";
 import { addDays, localDate } from "../lib/progression";
 import type { BlockerId, IdentityId, OnboardingAnswers, PersonalizationQuestion } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
-import { BotanicalBranch } from "./BotanicalBranch";
 import { ConsentSheet } from "./ConsentSheet";
 import { BrandMark } from "./BrandMark";
-import { Field, PrimaryButton, QuietButton, Rule } from "./Controls";
+import { Field, PrimaryButton, QuietButton } from "./Controls";
 import { PillarIcon } from "./PillarIcon";
-import { Body, Breathe, Display, DisplayItalic, Label, Micro } from "./Type";
+import { Body, Breathe, Display, Label, Micro } from "./Type";
 
 const STEPS = [
   {
@@ -257,43 +255,6 @@ function BlockerChip({
   );
 }
 
-function ScanLine() {
-  const [progress] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: 2200,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [progress]);
-
-  return (
-    <View style={styles.scanTrack}>
-      <Animated.View
-        style={[
-          styles.scanBar,
-          {
-            transform: [
-              {
-                translateX: progress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-48, 144],
-                }),
-              },
-            ],
-          },
-        ]}
-      />
-    </View>
-  );
-}
-
 function GeneratingOverlay({
   title,
   message,
@@ -311,9 +272,9 @@ function GeneratingOverlay({
         <Label style={{ color: colors.copperLight }}>One moment</Label>
         <Display style={styles.generatingTitle}>{title}</Display>
         <Body style={styles.generatingMessage}>{message}</Body>
+        <ActivityIndicator color={colors.copper} style={{ marginTop: 20 }} />
       </View>
 
-      <ScanLine />
     </View>
   );
 }
@@ -331,7 +292,7 @@ const FALLBACK_COPY: Record<FallbackReason, string> = {
 };
 
 export function Onboarding({ onCancel }: { onCancel?: () => void } = {}) {
-  const { user, submitOnboarding, authBusy, signOut, error, aiAllowed, recordConsent, snapshot } = useGame();
+  const { submitOnboarding, authBusy, signOut, error, aiAllowed, recordConsent, snapshot } = useGame();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Partial<OnboardingAnswers>>({
@@ -509,10 +470,6 @@ export function Onboarding({ onCancel }: { onCancel?: () => void } = {}) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View pointerEvents="none" style={styles.branch}>
-          <BotanicalBranch height={260} opacity={0.09} />
-        </View>
-
         <View style={styles.stepRow}>
           <Micro>
             {current.key} <Text style={{ color: colors.sageDeep }}>/ 05</Text>
@@ -734,7 +691,7 @@ export function Onboarding({ onCancel }: { onCancel?: () => void } = {}) {
                   <View key={practice.branch} style={styles.seedCard}>
                     <View style={styles.seedHeader}>
                       <View style={styles.seedTitleRow}>
-                        <PillarIcon pillar={practice.branch} size={14} color={meta.accent} />
+                        <PillarIcon pillar={practice.branch} size={14} color={colors.copper} />
                         <Text style={styles.seedBranchName}>
                           {meta.name} · {practice.role === "primary" ? "every day" : "once this week"}
                         </Text>
@@ -809,13 +766,6 @@ export function Onboarding({ onCancel }: { onCancel?: () => void } = {}) {
           the goal or the daily size at any time without losing what you have done.
         </Text>
 
-        <Rule style={{ marginTop: 28 }} />
-        <DisplayItalic style={styles.quote}>
-          “Stop tracking the life you want. Start growing it.”
-        </DisplayItalic>
-        <Micro style={{ marginTop: 10 }}>
-          {user?.name ? `For ${user.name}` : "Become your future self"}
-        </Micro>
       </ScrollView>
 
       <ConsentSheet
@@ -853,8 +803,7 @@ const styles = StyleSheet.create({
   brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandName: { fontSize: 17.5, letterSpacing: -0.3 },
   signOut: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.sage },
-  content: { paddingHorizontal: 22, paddingTop: 22, paddingBottom: 36 },
-  branch: { position: "absolute", right: -110, top: 30 },
+  content: { paddingHorizontal: 22, paddingTop: 22, paddingBottom: 36, width: "100%", maxWidth: 560, alignSelf: "center" },
   stepRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -862,12 +811,14 @@ const styles = StyleSheet.create({
   },
   stepLabel: { fontFamily: fonts.sans, fontSize: 11, color: colors.sage },
   progressTrack: {
-    height: StyleSheet.hairlineWidth,
+    height: 4,
+    borderRadius: 12,
     backgroundColor: alpha(colors.bone, 0.1),
     marginTop: 12,
   },
   progressFill: {
-    height: StyleSheet.hairlineWidth,
+    height: 4,
+    borderRadius: 12,
     backgroundColor: colors.copper,
   },
   question: { marginTop: 26, fontSize: 32, lineHeight: 36, letterSpacing: -0.7 },
@@ -878,19 +829,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    paddingHorizontal: 4,
+    paddingHorizontal: 14,
     paddingVertical: 13,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: hairline,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: hairline,
+    borderRadius: 12,
+    backgroundColor: colors.ink850,
     position: "relative",
   },
-  choiceSelected: { backgroundColor: alpha(colors.bone, 0.035) },
+  choiceSelected: { borderColor: colors.copper, backgroundColor: colors.selectionSurface },
   choiceBar: {
     position: "absolute",
     left: 0,
     top: 12,
     bottom: 12,
-    width: 1,
+    width: 0,
     backgroundColor: colors.copper,
   },
   choiceIcon: {
@@ -927,11 +881,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: alpha(colors.bone, 0.22),
-    borderRadius: 2,
+    borderRadius: 12,
   },
   goalChipSelected: {
     borderColor: alpha(colors.copper, 0.7),
-    backgroundColor: alpha(colors.copper, 0.08),
+    backgroundColor: colors.selectionSurface,
   },
   goalChipText: {
     fontFamily: fonts.sans,
@@ -975,7 +929,7 @@ const styles = StyleSheet.create({
     backgroundColor: alpha(colors.copper, 0.12),
     paddingHorizontal: 10,
     paddingVertical: 7,
-    borderRadius: 2,
+    borderRadius: 12,
   },
   safetySuggestionLabel: {
     fontFamily: fonts.sansMedium,
@@ -1010,11 +964,11 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: hairline,
-    borderRadius: 2,
+    borderRadius: 12,
   },
   blockerCardSelected: {
     borderColor: alpha(colors.copper, 0.65),
-    backgroundColor: alpha(colors.copper, 0.06),
+    backgroundColor: colors.selectionSurface,
   },
   blockerLabel: { fontFamily: fonts.sansMedium, fontSize: 12.5 },
   blockerSub: {
@@ -1037,9 +991,10 @@ const styles = StyleSheet.create({
   starterDetail: { fontFamily: fonts.mono, fontSize: 10.5, lineHeight: 15, color: colors.sage },
   previewSummaryCard: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: alpha(colors.lichen, 0.35),
-    backgroundColor: alpha(colors.ink850, 0.7),
-    padding: 14,
+    borderColor: colors.focusBorder,
+    backgroundColor: colors.focusSurface,
+    borderRadius: 14,
+    padding: 18,
     gap: 8,
   },
   previewBadgeRow: {
@@ -1071,7 +1026,8 @@ const styles = StyleSheet.create({
   seedCard: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: hairline,
-    backgroundColor: alpha(colors.bone, 0.02),
+    backgroundColor: colors.ink850,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 4,

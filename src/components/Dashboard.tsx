@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { RotateCcw, X } from "lucide-react-native";
+import { ChevronDown, ChevronUp, RotateCcw, X } from "lucide-react-native";
 import { useGame } from "../lib/game-context";
 import { daysBetween } from "../lib/progression";
 import { syncMessage } from "../lib/sync-status";
@@ -11,7 +11,7 @@ import type { TreeNode } from "../lib/types";
 import { alpha, colors, fonts, hairline } from "../theme";
 import { BrandMark } from "./BrandMark";
 import { QuietButton } from "./Controls";
-import { Display, DisplayItalic, Label, Micro } from "./Type";
+import { Display, Label, Micro } from "./Type";
 import { SkillTree } from "./SkillTree";
 import { TodayCard } from "./TodayCard";
 import { PracticeSheet } from "./PracticeSheet";
@@ -30,6 +30,8 @@ export function Dashboard() {
   const [easyRequested, setEasyRequested] = useState(false);
   const [editing, setEditing] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [showTree, setShowTree] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [chapterOpen, setChapterOpen] = useState(false);
   const [chapterDismissed, setChapterDismissed] = useState(false);
 
@@ -75,16 +77,13 @@ export function Dashboard() {
           <Label>
             Season · Day {today.dayNumber} of {season.season_length_days ?? 30}
           </Label>
-          <Micro style={{ color: colors.lichen }}>
-            {today.streak} day streak · best {today.bestStreak}
-          </Micro>
+          <Micro>{daysLeft} days left</Micro>
         </View>
 
         <Display style={[styles.greeting, wide && styles.greetingWide]}>
-          {firstName ? `${firstName}, ` : ""}
-          <DisplayItalic style={{ color: colors.lichen }}>one thing today.</DisplayItalic>
+          {firstName ? `Hello, ${firstName}.` : "Your next step."}
         </Display>
-        <Text style={styles.goalLine} numberOfLines={2}>“{season.goal}”</Text>
+        <Text style={styles.goalLine}>{season.goal}</Text>
         {season.season_length_days ? <Micro style={{ marginTop: 8, textTransform: "none" }}>{today.pace}</Micro> : null}
 
         {today.welcomeBack ? (
@@ -99,7 +98,7 @@ export function Dashboard() {
         ) : null}
 
         {chapterReason && !chapterDismissed ? <View style={styles.chapterCard}>
-          <Display style={styles.chapterTitle}>{chapterReason === "ended" ? "Ready to reflect on this chapter?" : "Your tree has grown. Would you like to review what's next?"}</Display>
+          <Display style={styles.chapterTitle}>{chapterReason === "ended" ? "Ready to reflect on this chapter?" : "Your tree has grown. Would you like to review what’s next?"}</Display>
           <Text style={styles.chapterCopy}>Look back and choose what comes next. Your current plan stays until you decide.</Text>
           <QuietButton label="Review this chapter" onPress={() => setChapterOpen(true)} />
           <Pressable accessibilityRole="button" accessibilityLabel="Review this chapter later" onPress={() => setChapterDismissed(true)} style={styles.chapterLater}><Text style={styles.chapterLaterText}>Not now</Text></Pressable>
@@ -110,22 +109,28 @@ export function Dashboard() {
         <WeekReviewCard />
 
         <View style={styles.treeBlock}>
-          <View style={styles.sectionHead}>
-            <Micro style={{ color: colors.lichenDim }}>Your tree</Micro>
-            <Micro>{grown} of {nodes.length} grown</Micro>
-          </View>
-          <SkillTree nodes={nodes} onSelect={(node: TreeNode) => {
+          <Pressable onPress={() => setShowTree((value) => !value)} accessibilityRole="button" accessibilityState={{ expanded: showTree }} style={styles.disclosure}>
+            <View style={styles.disclosureText}>
+              <Text style={styles.disclosureTitle}>Your tree</Text>
+              <Text style={styles.disclosureDetail}>{grown} of {nodes.length} milestones grown</Text>
+            </View>
+            {showTree ? <ChevronUp size={19} color={colors.sage} /> : <ChevronDown size={19} color={colors.sage} />}
+          </Pressable>
+          {showTree ? <SkillTree nodes={nodes} onSelect={(node: TreeNode) => {
             const practice = today.primary.id === node.id ? today.primary : today.supporting.find((item) => item.id === node.id);
             if (practice) setActive(practice);
-          }} />
+          }} /> : null}
         </View>
 
         <View style={styles.historyBlock}>
-          <View style={styles.sectionHead}>
-            <Micro style={{ color: colors.lichenDim }}>Last seven days</Micro>
-            <Micro>{daysLeft} days left in this season</Micro>
-          </View>
-          {today.recent.map((day) => {
+          <Pressable onPress={() => setShowHistory((value) => !value)} accessibilityRole="button" accessibilityState={{ expanded: showHistory }} style={styles.disclosure}>
+            <View style={styles.disclosureText}>
+              <Text style={styles.disclosureTitle}>Recent activity</Text>
+              <Text style={styles.disclosureDetail}>Your last seven days</Text>
+            </View>
+            {showHistory ? <ChevronUp size={19} color={colors.sage} /> : <ChevronDown size={19} color={colors.sage} />}
+          </Pressable>
+          {showHistory ? today.recent.map((day) => {
             const counted = day.events.find((event) => event.kind === "full" || event.kind === "easy");
             const undone = day.events.length === 0;
             const label = counted
@@ -157,7 +162,7 @@ export function Dashboard() {
                 ) : null}
               </View>
             );
-          })}
+          }) : null}
         </View>
 
         <View style={styles.footerBlock}>
@@ -230,16 +235,19 @@ const styles = StyleSheet.create({
   seasonRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   greeting: { marginTop: 12, fontSize: 32, lineHeight: 36, letterSpacing: -0.9 },
   greetingWide: { fontSize: 40, lineHeight: 44 },
-  goalLine: { marginTop: 8, fontFamily: fonts.sans, fontSize: 12.5, lineHeight: 19, color: colors.boneDim },
+  goalLine: { marginTop: 8, fontFamily: fonts.sans, fontSize: 14, lineHeight: 22, color: colors.boneDim },
   welcome: {
     marginTop: 16, padding: 16, gap: 9, borderLeftWidth: 2, borderLeftColor: colors.lichen,
     backgroundColor: alpha(colors.lichen, 0.06),
   },
   welcomeTitle: { fontSize: 22, lineHeight: 25 },
   welcomeBody: { fontFamily: fonts.sans, fontSize: 12.5, lineHeight: 20, color: colors.sage },
-  treeBlock: { marginTop: 34 },
-  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 },
-  historyBlock: { marginTop: 30 },
+  treeBlock: { marginTop: 24 },
+  disclosure: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 16, paddingHorizontal: 18, backgroundColor: colors.ink850, borderRadius: 14, borderWidth: 1, borderColor: alpha(colors.bone, 0.14) },
+  disclosureText: { flex: 1, gap: 4 },
+  disclosureTitle: { fontFamily: fonts.sansSemi, fontSize: 15, color: colors.bone },
+  disclosureDetail: { fontFamily: fonts.sans, fontSize: 12, color: colors.sage },
+  historyBlock: { marginTop: 10 },
   historyRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 42, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: hairline },
   historyDot: { height: 5, width: 5, borderRadius: 3 },
   historyDate: { width: 46, fontFamily: fonts.mono, fontSize: 10, color: colors.sageDim },
@@ -261,7 +269,7 @@ const styles = StyleSheet.create({
   footerCopy: { fontFamily: fonts.sans, fontSize: 10.5, lineHeight: 18, color: colors.sage },
   undoBar: {
     position: "absolute", left: 16, right: 16, flexDirection: "row", alignItems: "center", gap: 12,
-    paddingHorizontal: 14, paddingVertical: 12, borderRadius: 2,
+    paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
     backgroundColor: colors.ink700, borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(colors.bone, 0.16),
   },
   undoBarText: { flex: 1, fontFamily: fonts.sansMedium, fontSize: 12, color: colors.bone },
